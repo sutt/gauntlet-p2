@@ -6,6 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -83,16 +84,25 @@ export default function TodosScreen() {
   };
 
   const handleDeleteTodo = async (todoId: string, todoTitle: string) => {
-    Alert.alert('Delete Todo', `Are you sure you want to delete "${todoTitle}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteTodo(todoId);
+    if (Platform.OS === 'web') {
+      // Web fallback using window.confirm
+      const confirmed = window.confirm(`Are you sure you want to delete "${todoTitle}"?`);
+      if (confirmed) {
+        await deleteTodo(todoId);
+      }
+    } else {
+      // Native Alert for iOS/Android
+      Alert.alert('Delete Todo', `Are you sure you want to delete "${todoTitle}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteTodo(todoId);
+          },
         },
-      },
-    ]);
+      ]);
+    }
   };
 
   const getStatusColor = () => {
