@@ -41,3 +41,9 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Agro project directory
+.agdocs/
+
+# Agro worktrees
+trees/
