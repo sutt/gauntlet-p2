@@ -105,19 +105,18 @@ export const sendMessage = async (
       }
     });
 
-    batch.set(
-      convRef,
-      {
-        lastMessage: text.substring(0, 100),
-        lastMessageTime: Timestamp.now(),
-        lastMessageSenderId: userId,
-        ...unreadUpdates,
-      },
-      { merge: true }
-    );
+    console.log(`📨 Sending message - Participants:`, participants, `Unread updates:`, Object.keys(unreadUpdates));
+
+    // Use update() instead of set() to properly handle nested field paths
+    batch.update(convRef, {
+      lastMessage: text.substring(0, 100),
+      lastMessageTime: Timestamp.now(),
+      lastMessageSenderId: userId,
+      ...unreadUpdates,
+    });
 
     await batch.commit();
-    console.log(`Sent message and incremented unread count for ${participants.length - 1} participants`);
+    console.log(`✅ Sent message and incremented unread count for ${participants.length - 1} participants`);
     return messageRef.id;
   } catch (error) {
     console.error('Error sending message:', error);

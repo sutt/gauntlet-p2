@@ -32,6 +32,12 @@ const timestampToDate = (timestamp: any): Date => {
  */
 const convertDocToConversation = (doc: any): Conversation => {
   const data = doc.data();
+
+  // Debug: Log unreadCount from Firestore for ALL conversations with unread counts
+  if (data.unreadCount && Object.keys(data.unreadCount).length > 0) {
+    console.log(`🔥 Firestore conversation ${doc.id} unreadCount:`, data.unreadCount);
+  }
+
   return {
     id: doc.id,
     participants: data.participants || [],

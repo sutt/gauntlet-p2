@@ -230,6 +230,15 @@ export default function ChatsScreen() {
     // Milestone 11: Get unread count for current user
     const unreadCount = (item.unreadCount && user?.uid) ? (item.unreadCount[user.uid] || 0) : 0;
 
+    // Debug: Log unread count data for ALL conversations with unread counts
+    if (item.unreadCount && Object.keys(item.unreadCount).length > 0) {
+      console.log(`📊 Conversation ${item.id}:`, {
+        unreadCount: item.unreadCount,
+        userId: user?.uid,
+        calculatedCount: unreadCount,
+      });
+    }
+
     return (
       <TouchableOpacity
         style={[styles.conversationItem, { borderBottomColor: borderColor }]}
