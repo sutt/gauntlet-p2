@@ -8,6 +8,8 @@ import {
   limit,
   Timestamp,
   writeBatch,
+  getDoc,
+  increment,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Message } from '@/types/chat';
@@ -88,18 +90,34 @@ export const sendMessage = async (
     batch.set(messageRef, messageData);
 
     // Milestone 5: Update conversation metadata for last message preview
+    // Milestone 11: Increment unread count for all participants except sender
     const convRef = doc(db, 'conversations', conversationId);
+
+    // First, get the conversation to find all participants
+    const convSnap = await getDoc(convRef);
+    const participants = convSnap.exists() ? (convSnap.data().participants || []) : [];
+
+    // Build the update object to increment unread count for all participants except sender
+    const unreadUpdates: Record<string, any> = {};
+    participants.forEach((participantId: string) => {
+      if (participantId !== userId) {
+        unreadUpdates[`unreadCount.${participantId}`] = increment(1);
+      }
+    });
+
     batch.set(
       convRef,
       {
         lastMessage: text.substring(0, 100),
         lastMessageTime: Timestamp.now(),
         lastMessageSenderId: userId,
+        ...unreadUpdates,
       },
       { merge: true }
     );
 
     await batch.commit();
+    console.log(`Sent message and incremented unread count for ${participants.length - 1} participants`);
     return messageRef.id;
   } catch (error) {
     console.error('Error sending message:', error);
@@ -154,7 +172,8 @@ export const subscribeToMessages = (
 /**
  * MILESTONE 9: Mark messages as read
  * Adds current user to the readBy map for each message
- * MANUAL: Ensure Firestore security rules allow users to update readBy field
+ * MILESTONE 11: Reset unread count to 0 for current user
+ * MANUAL: Ensure Firestore security rules allow users to update readBy field and conversation unreadCount
  */
 export const markMessagesAsRead = async (
   conversationId: string,
@@ -176,8 +195,14 @@ export const markMessagesAsRead = async (
       });
     });
 
+    // Milestone 11: Reset unread count to 0 for this user
+    const convRef = doc(db, 'conversations', conversationId);
+    batch.update(convRef, {
+      [`unreadCount.${userId}`]: 0,
+    });
+
     await batch.commit();
-    console.log(`Marked ${messageIds.length} messages as read for user ${userId}`);
+    console.log(`Marked ${messageIds.length} messages as read and reset unread count for user ${userId}`);
   } catch (error) {
     console.error('Error marking messages as read:', error);
     throw error;

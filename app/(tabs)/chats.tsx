@@ -227,6 +227,9 @@ export default function ChatsScreen() {
       ? isUserOnline(userCache[otherParticipants[0]]?.lastSeen)
       : false;
 
+    // Milestone 11: Get unread count for current user
+    const unreadCount = (item.unreadCount && user?.uid) ? (item.unreadCount[user.uid] || 0) : 0;
+
     return (
       <TouchableOpacity
         style={[styles.conversationItem, { borderBottomColor: borderColor }]}
@@ -256,6 +259,14 @@ export default function ChatsScreen() {
         <View style={styles.conversationMeta}>
           {timestampText && (
             <ThemedText style={styles.timestamp}>{timestampText}</ThemedText>
+          )}
+          {/* Milestone 11: Unread count badge */}
+          {unreadCount > 0 && (
+            <View style={[styles.unreadBadge, { backgroundColor: tintColor }]}>
+              <ThemedText style={styles.unreadBadgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </ThemedText>
+            </View>
           )}
         </View>
       </TouchableOpacity>
@@ -562,6 +573,21 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: 12,
     opacity: 0.5,
+  },
+  // Milestone 11: Unread count badge
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    marginTop: 4,
+  },
+  unreadBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   emptyContainer: {
     flex: 1,

@@ -39,6 +39,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.auth.uid in request.resource.data.participants
                     && request.resource.data.participants.size() >= 2; // Minimum 2 users (direct or group)
+      // MILESTONE 11: Update includes setting unreadCount, lastMessage, etc.
       allow update: if isSignedIn() && request.auth.uid in resource.data.participants;
       allow delete: if false; // No deletion for MVP
 

@@ -28,6 +28,7 @@ const timestampToDate = (timestamp: any): Date => {
  * Convert Firestore document to Conversation object
  * Milestone 5: Added last message fields
  * Milestone 10: Added type and groupName fields
+ * Milestone 11: Added unreadCount field
  */
 const convertDocToConversation = (doc: any): Conversation => {
   const data = doc.data();
@@ -41,6 +42,8 @@ const convertDocToConversation = (doc: any): Conversation => {
     lastMessageSenderId: data.lastMessageSenderId || undefined,
     createdAt: data.createdAt ? timestampToDate(data.createdAt) : undefined,
     createdBy: data.createdBy || undefined,
+    // Milestone 11: Unread counts
+    unreadCount: data.unreadCount || {},
   };
 };
 
@@ -111,6 +114,8 @@ export const createConversation = async (
       lastMessageSenderId: '',
       createdAt: Timestamp.now(),
       createdBy: creatorId,
+      // Milestone 11: Initialize unreadCount to 0 for all participants
+      unreadCount: Object.fromEntries(uniqueParticipants.map(id => [id, 0])),
     };
 
     // Only include groupName if it's defined (for group chats)

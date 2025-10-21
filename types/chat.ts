@@ -33,6 +33,8 @@ export interface Conversation {
   lastMessageSenderId?: string; // Milestone 5: Who sent it
   createdAt?: Date; // Milestone 5: Conversation creation time
   createdBy?: string; // Milestone 5: Conversation creator
+  // Milestone 11: Unread counts - map of userId -> count
+  unreadCount?: Record<string, number>;
 }
 
 // User interface (will expand in Milestone 3)
