@@ -103,16 +103,20 @@ export const createConversation = async (
       groupName = customGroupName || await generateGroupName(uniqueParticipants);
     }
 
-    const conversationData = {
+    const conversationData: any = {
       participants: uniqueParticipants,
       type: conversationType,
-      groupName,
       lastMessage: '',
       lastMessageTime: Timestamp.now(),
       lastMessageSenderId: '',
       createdAt: Timestamp.now(),
       createdBy: creatorId,
     };
+
+    // Only include groupName if it's defined (for group chats)
+    if (groupName) {
+      conversationData.groupName = groupName;
+    }
 
     const docRef = await addDoc(collection(db, 'conversations'), conversationData);
     console.log(`Created ${conversationType} conversation:`, docRef.id, groupName ? `(${groupName})` : '');
