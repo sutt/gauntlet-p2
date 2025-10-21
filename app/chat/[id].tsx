@@ -3,9 +3,11 @@ import { useAuth } from '@/context/auth';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { sendMessage, subscribeToMessages } from '@/services/messages';
 import { getUser } from '@/services/users';
-import { Message } from '@/types/chat';
+import { getConversation } from '@/services/conversations';
+import { Message, User } from '@/types/chat';
 import { formatMessageTime, getDateDividerText } from '@/utils/date-format';
-import { useLocalSearchParams } from 'expo-router';
+import { formatLastSeen, isUserOnline } from '@/services/presence';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 // Type for items in the FlatList (can be message or date divider)
 type ChatListItem =
@@ -27,6 +30,7 @@ type ChatListItem =
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
   const [pendingMessages, setPendingMessages] = useState<Message[]>([]); // Milestone 7: Optimistic UI
@@ -34,6 +38,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [displayName, setDisplayName] = useState<string>('');
+  const [otherUser, setOtherUser] = useState<User | null>(null); // Milestone 8: Other user profile
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -53,6 +58,30 @@ export default function ChatScreen() {
       }
     });
   }, [user]);
+
+  // Milestone 8: Fetch conversation and other user's profile
+  useEffect(() => {
+    if (!id || !user) return;
+
+    const fetchConversationData = async () => {
+      const conversation = await getConversation(id);
+      if (!conversation) return;
+
+      // Get the other user(s) in the conversation
+      const otherUserId = conversation.participants.find(p => p !== user.uid);
+      if (!otherUserId) return;
+
+      const otherUserProfile = await getUser(otherUserId);
+      setOtherUser(otherUserProfile);
+    };
+
+    fetchConversationData();
+
+    // Re-fetch periodically to update online status (every 30 seconds)
+    const interval = setInterval(fetchConversationData, 30000);
+
+    return () => clearInterval(interval);
+  }, [id, user]);
 
   // Subscribe to real-time messages
   useEffect(() => {
@@ -285,6 +314,37 @@ export default function ChatScreen() {
       behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : insets.bottom}
     >
+      {/* Milestone 8: Chat Header with Online Status */}
+      <View
+        style={[
+          styles.chatHeader,
+          { borderBottomColor: borderColor, paddingTop: insets.top },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="chevron-back" size={28} color={tintColor} />
+        </TouchableOpacity>
+
+        <View style={styles.headerContent}>
+          <ThemedText type="defaultSemiBold" style={styles.headerTitle}>
+            {otherUser?.displayName || 'Loading...'}
+          </ThemedText>
+          {otherUser && (
+            <View style={styles.headerStatus}>
+              {isUserOnline(otherUser.lastSeen) && (
+                <View style={styles.headerOnlineDot} />
+              )}
+              <ThemedText style={styles.headerStatusText}>
+                {formatLastSeen(otherUser.lastSeen)}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+      </View>
+
       <FlatList
         data={chatListItems}
         renderItem={renderChatItem}
@@ -352,6 +412,40 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
+  },
+  // Milestone 8: Chat header with online status
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    padding: 4,
+    marginRight: 8,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+  },
+  headerStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  headerOnlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#34C759', // iOS green
+    marginRight: 6,
+  },
+  headerStatusText: {
+    fontSize: 12,
+    opacity: 0.7,
   },
   messagesList: {
     padding: 16,

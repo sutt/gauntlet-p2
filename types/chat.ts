@@ -32,4 +32,9 @@ export interface User {
   id: string;
   email: string;
   displayName: string;
+  createdAt?: Date;
+  // Milestone 8: Online status tracking
+  lastSeen?: Date;
+  online?: boolean; // Computed client-side: lastSeen < 2 minutes ago
+  pushTokens?: string[]; // For future push notifications
 }

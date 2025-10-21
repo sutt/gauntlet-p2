@@ -22,6 +22,7 @@ import {
 } from '@/services/conversations';
 import { getUsers } from '@/services/users';
 import { formatRelativeTime } from '@/utils/date-format';
+import { isUserOnline } from '@/services/presence';
 
 export default function ChatsScreen() {
   const { user } = useAuth();
@@ -158,15 +159,26 @@ export default function ChatsScreen() {
       ? formatRelativeTime(item.lastMessageTime)
       : '';
 
+    // Milestone 8: Check if other user is online (only for 1-on-1 chats)
+    const isOnline = otherParticipants.length === 1
+      ? isUserOnline(userCache[otherParticipants[0]]?.lastSeen)
+      : false;
+
     return (
       <TouchableOpacity
         style={[styles.conversationItem, { borderBottomColor: borderColor }]}
         onPress={() => handleConversationPress(item.id)}
       >
-        <View style={styles.avatarPlaceholder}>
-          <ThemedText style={styles.avatarText}>
-            {displayText[0]?.toUpperCase() || '?'}
-          </ThemedText>
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatarPlaceholder}>
+            <ThemedText style={styles.avatarText}>
+              {displayText[0]?.toUpperCase() || '?'}
+            </ThemedText>
+          </View>
+          {/* Milestone 8: Online indicator */}
+          {isOnline && (
+            <View style={styles.onlineIndicator} />
+          )}
         </View>
 
         <View style={styles.conversationContent}>
@@ -316,6 +328,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     alignItems: 'center',
   },
+  // Milestone 8: Container for avatar + online indicator
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
   avatarPlaceholder: {
     width: 50,
     height: 50,
@@ -323,7 +340,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+  },
+  // Milestone 8: Online status indicator (green dot)
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#34C759', // iOS green
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   avatarText: {
     color: '#fff',
