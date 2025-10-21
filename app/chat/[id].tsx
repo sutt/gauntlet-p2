@@ -109,14 +109,14 @@ export default function ChatScreen() {
           style={[
             styles.messageBubble,
             isOwnMessage
-              ? { backgroundColor: tintColor }
+              ? { backgroundColor: '#007AFF' } // iOS blue, consistent across platforms
               : { backgroundColor: '#E5E5EA' },
           ]}
         >
           <ThemedText
             style={[
               styles.messageText,
-              isOwnMessage && { color: '#fff' },
+              isOwnMessage ? { color: '#fff' } : { color: '#000' },
             ]}
           >
             {item.text}
@@ -124,7 +124,7 @@ export default function ChatScreen() {
           <ThemedText
             style={[
               styles.timestamp,
-              isOwnMessage && { color: '#fff' },
+              isOwnMessage ? { color: '#fff' } : { color: '#000' },
             ]}
           >
             {formatTime(item.timestamp)}
