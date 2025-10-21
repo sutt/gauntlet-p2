@@ -10,7 +10,8 @@ import { AuthProvider, useAuth } from '@/context/auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  // Default to chats tab since home/index was removed
+  initialRouteName: '(tabs)/chats',
 };
 
 function RootLayoutNav() {
@@ -28,7 +29,8 @@ function RootLayoutNav() {
     if (!user && !inAuthFlow) {
       router.replace('/login');
     } else if (user && inAuthFlow) {
-      router.replace('/');
+      // Redirect to chats tab (home/index tab was removed)
+      router.replace('/chats');
     }
   }, [user, loading, segments]);
 
