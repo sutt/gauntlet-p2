@@ -29,6 +29,7 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [pendingMessages, setPendingMessages] = useState<Message[]>([]); // Milestone 7: Optimistic UI
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -75,12 +76,17 @@ export default function ChatScreen() {
     return unsubscribe;
   }, [id, user]);
 
+  // Milestone 7: Combine server messages with pending (optimistic) messages
+  const allMessages = useMemo(() => {
+    return [...messages, ...pendingMessages];
+  }, [messages, pendingMessages]);
+
   // Process messages to insert date dividers
   const chatListItems = useMemo(() => {
     const items: ChatListItem[] = [];
     let lastDate: string | null = null;
 
-    messages.forEach((message) => {
+    allMessages.forEach((message) => {
       const messageDate = new Date(message.timestamp);
       const dateDividerText = getDateDividerText(messageDate);
 
@@ -101,25 +107,79 @@ export default function ChatScreen() {
     });
 
     return items;
-  }, [messages]);
+  }, [allMessages]);
+
+  // Milestone 7: Retry failed message
+  const retryMessage = async (tempId: string) => {
+    if (!user || !id) return;
+
+    // Find the failed message
+    const failedMessage = pendingMessages.find((m) => m.tempId === tempId);
+    if (!failedMessage) return;
+
+    // Mark as sending again
+    setPendingMessages((prev) =>
+      prev.map((m) =>
+        m.tempId === tempId ? { ...m, status: 'sending' as const } : m
+      )
+    );
+
+    try {
+      const userName = displayName || user.email?.split('@')[0] || 'Unknown';
+      await sendMessage(id, failedMessage.text, user.uid, userName);
+
+      // Remove from pending messages on success
+      setPendingMessages((prev) => prev.filter((m) => m.tempId !== tempId));
+    } catch (error) {
+      console.error('Error retrying message:', error);
+      // Mark as failed again
+      setPendingMessages((prev) =>
+        prev.map((m) =>
+          m.tempId === tempId ? { ...m, status: 'failed' as const } : m
+        )
+      );
+    }
+  };
 
   const handleSend = async () => {
     if (!inputText.trim() || !user || !id) return;
 
-    setSending(true);
     const messageText = inputText;
     setInputText(''); // Clear input immediately for better UX
 
-    try {
-      // Use display name from user profile
-      const userName = displayName || user.email?.split('@')[0] || 'Unknown';
+    // Milestone 7: Generate temporary ID for optimistic message
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+    // Milestone 7: Create optimistic message
+    const userName = displayName || user.email?.split('@')[0] || 'Unknown';
+    const optimisticMessage: Message = {
+      id: tempId,
+      text: messageText,
+      senderId: user.uid,
+      senderName: userName,
+      timestamp: new Date(),
+      conversationId: id,
+      status: 'sending',
+      tempId,
+    };
+
+    // Milestone 7: Add to pending messages immediately (instant feedback)
+    setPendingMessages((prev) => [...prev, optimisticMessage]);
+    setSending(true);
+
+    try {
       await sendMessage(id, messageText, user.uid, userName);
+
+      // Milestone 7: Remove from pending messages on success (will appear in server messages)
+      setPendingMessages((prev) => prev.filter((m) => m.tempId !== tempId));
     } catch (error) {
       console.error('Error sending message:', error);
-      // Restore text if send failed
-      setInputText(messageText);
-      alert('Failed to send message. Please try again.');
+      // Milestone 7: Mark as failed (keep in pending for retry)
+      setPendingMessages((prev) =>
+        prev.map((m) =>
+          m.tempId === tempId ? { ...m, status: 'failed' as const } : m
+        )
+      );
     } finally {
       setSending(false);
     }
@@ -162,6 +222,9 @@ export default function ChatScreen() {
             isOwnMessage
               ? { backgroundColor: '#007AFF' } // iOS blue, consistent across platforms
               : { backgroundColor: '#E5E5EA' },
+            // Milestone 7: Visual feedback for sending/failed messages
+            message.status === 'sending' && { opacity: 0.6 },
+            message.status === 'failed' && { backgroundColor: '#FF3B30' },
           ]}
         >
           <ThemedText
@@ -172,15 +235,29 @@ export default function ChatScreen() {
           >
             {message.text}
           </ThemedText>
-          <ThemedText
-            style={[
-              styles.timestamp,
-              isOwnMessage ? { color: '#fff' } : { color: '#000' },
-            ]}
-          >
-            {formatMessageTime(message.timestamp)}
-          </ThemedText>
+          <View style={styles.messageFooter}>
+            <ThemedText
+              style={[
+                styles.timestamp,
+                isOwnMessage ? { color: '#fff' } : { color: '#000' },
+              ]}
+            >
+              {formatMessageTime(message.timestamp)}
+              {/* Milestone 7: Status indicators */}
+              {message.status === 'sending' && ' • Sending...'}
+              {message.status === 'failed' && ' • Failed'}
+            </ThemedText>
+          </View>
         </View>
+        {/* Milestone 7: Retry button for failed messages */}
+        {message.status === 'failed' && message.tempId && (
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => retryMessage(message.tempId!)}
+          >
+            <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -311,10 +388,27 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
   },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   timestamp: {
     fontSize: 11,
-    marginTop: 4,
     opacity: 0.7,
+  },
+  retryButton: {
+    marginTop: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    alignSelf: 'flex-end',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',
