@@ -15,6 +15,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/context/auth';
 import { Message } from '@/types/chat';
 import { sendMessage, subscribeToMessages } from '@/services/messages';
+import { getUser } from '@/services/users';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,11 +24,26 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [displayName, setDisplayName] = useState<string>('');
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
   const textColor = useThemeColor({}, 'text');
+
+  // Fetch current user's display name
+  useEffect(() => {
+    if (!user) return;
+
+    getUser(user.uid).then((userProfile) => {
+      if (userProfile) {
+        setDisplayName(userProfile.displayName);
+      } else {
+        // Fallback to email prefix if profile doesn't exist yet
+        setDisplayName(user.email?.split('@')[0] || 'Unknown');
+      }
+    });
+  }, [user]);
 
   // Subscribe to real-time messages
   useEffect(() => {
@@ -59,8 +75,8 @@ export default function ChatScreen() {
     setInputText(''); // Clear input immediately for better UX
 
     try {
-      // Get user display name (email prefix for now, will improve in Milestone 3)
-      const userName = user.email?.split('@')[0] || 'Unknown';
+      // Use display name from user profile
+      const userName = displayName || user.email?.split('@')[0] || 'Unknown';
 
       await sendMessage(id, messageText, user.uid, userName);
     } catch (error) {
@@ -83,6 +99,12 @@ export default function ChatScreen() {
           isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer,
         ]}
       >
+        {/* Show sender name for other users' messages */}
+        {!isOwnMessage && (
+          <ThemedText style={styles.senderName}>
+            {item.senderName}
+          </ThemedText>
+        )}
         <View
           style={[
             styles.messageBubble,
@@ -219,6 +241,13 @@ const styles = StyleSheet.create({
   },
   otherMessageContainer: {
     alignSelf: 'flex-start',
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    marginLeft: 12,
+    opacity: 0.7,
   },
   messageBubble: {
     padding: 12,

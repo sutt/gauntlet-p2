@@ -14,12 +14,13 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/context/auth';
-import { Conversation } from '@/types/chat';
+import { Conversation, User } from '@/types/chat';
 import {
   subscribeToConversations,
   createConversation,
   findDirectConversation,
 } from '@/services/conversations';
+import { getUsers } from '@/services/users';
 
 export default function ChatsScreen() {
   const { user } = useAuth();
@@ -28,6 +29,7 @@ export default function ChatsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [newUserId, setNewUserId] = useState('');
   const [creating, setCreating] = useState(false);
+  const [userCache, setUserCache] = useState<Record<string, User>>({});
 
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
@@ -46,7 +48,7 @@ export default function ChatsScreen() {
 
     const unsubscribe = subscribeToConversations(
       user.uid,
-      (convs) => {
+      async (convs) => {
         console.log('🔍 ChatsScreen: Received', convs.length, 'conversations');
         if (convs.length > 0) {
           console.log('🔍 ChatsScreen: First conversation:', {
@@ -55,6 +57,26 @@ export default function ChatsScreen() {
           });
         }
         setConversations(convs);
+
+        // Fetch user profiles for all participants
+        const allParticipants = new Set<string>();
+        convs.forEach(conv => {
+          conv.participants.forEach(p => {
+            if (p !== user.uid) {
+              allParticipants.add(p);
+            }
+          });
+        });
+
+        if (allParticipants.size > 0) {
+          const users = await getUsers(Array.from(allParticipants));
+          const newCache: Record<string, User> = {};
+          users.forEach(u => {
+            newCache[u.id] = u;
+          });
+          setUserCache(prev => ({ ...prev, ...newCache }));
+        }
+
         setLoading(false);
       },
       (error) => {
@@ -119,8 +141,14 @@ export default function ChatsScreen() {
   const renderConversationItem = ({ item }: { item: Conversation }) => {
     // Get the other user(s) in the conversation
     const otherParticipants = item.participants.filter(p => p !== user?.uid);
-    const displayText = otherParticipants.length > 0
-      ? otherParticipants.join(', ')
+
+    // Get display names from user cache
+    const displayNames = otherParticipants
+      .map(userId => userCache[userId]?.displayName || userId)
+      .filter(Boolean);
+
+    const displayText = displayNames.length > 0
+      ? displayNames.join(', ')
       : 'Unknown User';
 
     return (
