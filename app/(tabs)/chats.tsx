@@ -21,6 +21,7 @@ import {
   findDirectConversation,
 } from '@/services/conversations';
 import { getUsers } from '@/services/users';
+import { formatRelativeTime } from '@/utils/date-format';
 
 export default function ChatsScreen() {
   const { user } = useAuth();
@@ -151,6 +152,12 @@ export default function ChatsScreen() {
       ? displayNames.join(', ')
       : 'Unknown User';
 
+    // Milestone 5: Get last message preview and timestamp
+    const lastMessagePreview = item.lastMessage || 'No messages yet';
+    const timestampText = item.lastMessageTime
+      ? formatRelativeTime(item.lastMessageTime)
+      : '';
+
     return (
       <TouchableOpacity
         style={[styles.conversationItem, { borderBottomColor: borderColor }]}
@@ -166,13 +173,15 @@ export default function ChatsScreen() {
           <ThemedText type="defaultSemiBold" style={styles.conversationName}>
             {displayText}
           </ThemedText>
-          <ThemedText style={styles.conversationPreview}>
-            Tap to open conversation
+          <ThemedText style={styles.conversationPreview} numberOfLines={1}>
+            {lastMessagePreview}
           </ThemedText>
         </View>
 
         <View style={styles.conversationMeta}>
-          <ThemedText style={styles.timestamp}>Now</ThemedText>
+          {timestampText && (
+            <ThemedText style={styles.timestamp}>{timestampText}</ThemedText>
+          )}
         </View>
       </TouchableOpacity>
     );

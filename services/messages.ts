@@ -64,8 +64,7 @@ export const sendMessage = async (
     const messageRef = doc(messagesRef);
     batch.set(messageRef, messageData);
 
-    // Update conversation metadata (we'll add this in Milestone 5)
-    // For now, just send the message
+    // Milestone 5: Update conversation metadata for last message preview
     const convRef = doc(db, 'conversations', conversationId);
     batch.set(
       convRef,

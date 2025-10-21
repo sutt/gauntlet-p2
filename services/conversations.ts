@@ -25,12 +25,18 @@ const timestampToDate = (timestamp: any): Date => {
 
 /**
  * Convert Firestore document to Conversation object
+ * Milestone 5: Added last message fields
  */
 const convertDocToConversation = (doc: any): Conversation => {
   const data = doc.data();
   return {
     id: doc.id,
     participants: data.participants || [],
+    lastMessage: data.lastMessage || undefined,
+    lastMessageTime: data.lastMessageTime ? timestampToDate(data.lastMessageTime) : undefined,
+    lastMessageSenderId: data.lastMessageSenderId || undefined,
+    createdAt: data.createdAt ? timestampToDate(data.createdAt) : undefined,
+    createdBy: data.createdBy || undefined,
   };
 };
 
