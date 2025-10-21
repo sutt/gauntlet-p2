@@ -37,18 +37,29 @@ export default function ChatsScreen() {
   // Subscribe to conversations
   useEffect(() => {
     if (!user) {
+      console.log('🔍 ChatsScreen: No user logged in');
       setLoading(false);
       return;
     }
 
+    console.log('🔍 ChatsScreen: Subscribing to conversations for user:', user.uid);
+
     const unsubscribe = subscribeToConversations(
       user.uid,
       (convs) => {
+        console.log('🔍 ChatsScreen: Received', convs.length, 'conversations');
+        if (convs.length > 0) {
+          console.log('🔍 ChatsScreen: First conversation:', {
+            id: convs[0].id,
+            participants: convs[0].participants,
+          });
+        }
         setConversations(convs);
         setLoading(false);
       },
       (error) => {
-        console.error('Error subscribing to conversations:', error);
+        console.error('❌ ChatsScreen: Error subscribing to conversations:', error);
+        console.error('❌ ChatsScreen: Error details:', error.message);
         setLoading(false);
         Alert.alert('Error', 'Failed to load conversations. Please try again.');
       }
