@@ -1,12 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  getReactNativePersistence,
-  initializeAuth,
-} from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { Platform } from 'react-native';
 
 // Firebase configuration loaded from environment variables
 // Copy .env.example to .env.local and fill in your values
@@ -25,12 +19,7 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Auth
 // MANUAL INTERVENTION: Make sure to enable an auth provider (e.g. Email/Password) in your Firebase console.
-export const auth =
-  Platform.OS === 'web'
-    ? getAuth(app)
-    : initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage),
-      });
+export const auth = getAuth(app);
 
 // Initialize Firestore
 export const db = getFirestore(app);
