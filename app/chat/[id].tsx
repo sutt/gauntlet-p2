@@ -39,6 +39,8 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [displayName, setDisplayName] = useState<string>('');
   const [otherUser, setOtherUser] = useState<User | null>(null); // Milestone 8: Other user profile
+  const [isGroupChat, setIsGroupChat] = useState(false); // Milestone 10: Track if conversation is a group
+  const [groupName, setGroupName] = useState<string>(''); // Milestone 10: Store group name
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -60,12 +62,21 @@ export default function ChatScreen() {
   }, [user]);
 
   // Milestone 8: Fetch conversation and other user's profile
+  // Milestone 10: Also detect if this is a group chat
   useEffect(() => {
     if (!id || !user) return;
 
     const fetchConversationData = async () => {
       const conversation = await getConversation(id);
       if (!conversation) return;
+
+      // Milestone 10: Check if this is a group chat
+      const isGroup = conversation.type === 'group' || conversation.participants.length > 2;
+      setIsGroupChat(isGroup);
+
+      if (isGroup && conversation.groupName) {
+        setGroupName(conversation.groupName);
+      }
 
       // Get the other user(s) in the conversation
       const otherUserId = conversation.participants.find(p => p !== user.uid);
@@ -277,6 +288,9 @@ export default function ChatScreen() {
     const message = item.data;
     const isOwnMessage = message.senderId === user?.uid;
 
+    // Milestone 10: In group chats, show sender name for ALL messages (including your own)
+    const shouldShowSenderName = isGroupChat;
+
     return (
       <View
         style={[
@@ -284,10 +298,13 @@ export default function ChatScreen() {
           isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer,
         ]}
       >
-        {/* Show sender name for other users' messages */}
-        {!isOwnMessage && (
-          <ThemedText style={styles.senderName}>
-            {message.senderName}
+        {/* Milestone 10: Show sender name in group chats for all messages */}
+        {shouldShowSenderName && (
+          <ThemedText style={[
+            styles.senderName,
+            isOwnMessage && styles.ownSenderName
+          ]}>
+            {isOwnMessage ? 'You' : message.senderName}
           </ThemedText>
         )}
         <View
@@ -387,6 +404,7 @@ export default function ChatScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : insets.bottom}
     >
       {/* Milestone 8: Chat Header with Online Status */}
+      {/* Milestone 10: Show group name for group chats */}
       <View
         style={[
           styles.chatHeader,
@@ -402,9 +420,10 @@ export default function ChatScreen() {
 
         <View style={styles.headerContent}>
           <ThemedText type="defaultSemiBold" style={styles.headerTitle}>
-            {otherUser?.displayName || 'Loading...'}
+            {isGroupChat ? (groupName || 'Group Chat') : (otherUser?.displayName || 'Loading...')}
           </ThemedText>
-          {otherUser && (
+          {/* Milestone 10: Don't show online status for group chats */}
+          {!isGroupChat && otherUser && (
             <View style={styles.headerStatus}>
               {isUserOnline(otherUser.lastSeen) && (
                 <View style={styles.headerOnlineDot} />
@@ -546,6 +565,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     marginLeft: 12,
     opacity: 0.7,
+  },
+  // Milestone 10: Style for own sender name in group chats
+  ownSenderName: {
+    marginLeft: 0,
+    marginRight: 12,
+    textAlign: 'right',
   },
   messageBubble: {
     padding: 12,

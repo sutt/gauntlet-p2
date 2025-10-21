@@ -32,6 +32,11 @@ export default function ChatsScreen() {
   const [newUserId, setNewUserId] = useState('');
   const [creating, setCreating] = useState(false);
   const [userCache, setUserCache] = useState<Record<string, User>>({});
+  // Milestone 10: Group chat modal state
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
+  const [groupUserIds, setGroupUserIds] = useState('');
+  const [groupName, setGroupName] = useState('');
+  const [showTypeSelector, setShowTypeSelector] = useState(false); // Type selection modal
 
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
@@ -140,18 +145,74 @@ export default function ChatsScreen() {
     }
   };
 
+  // Milestone 10: Handle group chat creation
+  const handleCreateGroup = async () => {
+    if (!groupUserIds.trim()) {
+      Alert.alert('Error', 'Please enter at least 2 user IDs, separated by commas');
+      return;
+    }
+
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to create a group');
+      return;
+    }
+
+    setCreating(true);
+
+    try {
+      // Parse user IDs from comma-separated input
+      const userIds = groupUserIds
+        .split(',')
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
+
+      if (userIds.length < 2) {
+        Alert.alert('Error', 'Please enter at least 2 user IDs');
+        setCreating(false);
+        return;
+      }
+
+      // Create group conversation
+      // Type will be auto-detected as 'group' since we have 3+ participants (including creator)
+      const conversationId = await createConversation(
+        userIds,
+        user.uid,
+        'group',
+        groupName.trim() || undefined
+      );
+
+      setGroupModalVisible(false);
+      setGroupUserIds('');
+      setGroupName('');
+
+      // Navigate to the new group conversation
+      router.push(`/chat/${conversationId}`);
+    } catch (error) {
+      console.error('Error creating group:', error);
+      Alert.alert('Error', 'Failed to create group. Please try again.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const renderConversationItem = ({ item }: { item: Conversation }) => {
-    // Get the other user(s) in the conversation
-    const otherParticipants = item.participants.filter(p => p !== user?.uid);
+    // Milestone 10: Show group name if it exists, otherwise show participants
+    let displayText: string;
+    if (item.type === 'group' && item.groupName) {
+      displayText = item.groupName;
+    } else {
+      // Get the other user(s) in the conversation
+      const otherParticipants = item.participants.filter(p => p !== user?.uid);
 
-    // Get display names from user cache
-    const displayNames = otherParticipants
-      .map(userId => userCache[userId]?.displayName || userId)
-      .filter(Boolean);
+      // Get display names from user cache
+      const displayNames = otherParticipants
+        .map(userId => userCache[userId]?.displayName || userId)
+        .filter(Boolean);
 
-    const displayText = displayNames.length > 0
-      ? displayNames.join(', ')
-      : 'Unknown User';
+      displayText = displayNames.length > 0
+        ? displayNames.join(', ')
+        : 'Unknown User';
+    }
 
     // Milestone 5: Get last message preview and timestamp
     const lastMessagePreview = item.lastMessage || 'No messages yet';
@@ -160,7 +221,9 @@ export default function ChatsScreen() {
       : '';
 
     // Milestone 8: Check if other user is online (only for 1-on-1 chats)
-    const isOnline = otherParticipants.length === 1
+    // Milestone 10: Don't show online indicator for groups
+    const otherParticipants = item.participants.filter(p => p !== user?.uid);
+    const isOnline = item.type !== 'group' && otherParticipants.length === 1
       ? isUserOnline(userCache[otherParticipants[0]]?.lastSeen)
       : false;
 
@@ -237,13 +300,66 @@ export default function ChatsScreen() {
         }
       />
 
-      {/* Floating Action Button */}
+      {/* Milestone 10: Floating Action Button with options */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: tintColor }]}
-        onPress={() => setModalVisible(true)}
+        onPress={() => setShowTypeSelector(true)}
       >
         <ThemedText style={styles.fabText}>+</ThemedText>
       </TouchableOpacity>
+
+      {/* Milestone 10: Conversation Type Selector Modal */}
+      <Modal
+        visible={showTypeSelector}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowTypeSelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor }]}>
+            <ThemedText type="subtitle" style={styles.modalTitle}>
+              New Conversation
+            </ThemedText>
+
+            <ThemedText style={styles.modalLabel}>
+              What would you like to create?
+            </ThemedText>
+
+            <TouchableOpacity
+              style={[styles.typeSelectorButton, { borderColor }]}
+              onPress={() => {
+                setShowTypeSelector(false);
+                setModalVisible(true);
+              }}
+            >
+              <ThemedText type="defaultSemiBold">Direct Chat</ThemedText>
+              <ThemedText style={styles.typeSelectorSubtext}>
+                Chat with one person
+              </ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.typeSelectorButton, { borderColor }]}
+              onPress={() => {
+                setShowTypeSelector(false);
+                setGroupModalVisible(true);
+              }}
+            >
+              <ThemedText type="defaultSemiBold">Group Chat</ThemedText>
+              <ThemedText style={styles.typeSelectorSubtext}>
+                Chat with multiple people
+              </ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalButton, styles.cancelButton, { borderColor, marginTop: 16 }]}
+              onPress={() => setShowTypeSelector(false)}
+            >
+              <ThemedText>Cancel</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Create Conversation Modal */}
       <Modal
@@ -255,7 +371,7 @@ export default function ChatsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor }]}>
             <ThemedText type="subtitle" style={styles.modalTitle}>
-              New Conversation
+              New Direct Chat
             </ThemedText>
 
             <ThemedText style={styles.modalLabel}>
@@ -295,6 +411,77 @@ export default function ChatsScreen() {
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <ThemedText style={styles.createButtonText}>Create</ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Milestone 10: Create Group Modal */}
+      <Modal
+        visible={groupModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setGroupModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor }]}>
+            <ThemedText type="subtitle" style={styles.modalTitle}>
+              New Group Chat
+            </ThemedText>
+
+            <ThemedText style={styles.modalLabel}>
+              Group Name (optional):
+            </ThemedText>
+            <TextInput
+              style={[styles.modalInput, { borderColor, color: textColor }]}
+              placeholder="e.g., My Awesome Group"
+              placeholderTextColor="#999"
+              value={groupName}
+              onChangeText={setGroupName}
+              autoCapitalize="words"
+            />
+
+            <ThemedText style={styles.modalLabel}>
+              User IDs (comma-separated):
+            </ThemedText>
+            <TextInput
+              style={[styles.modalInput, { borderColor, color: textColor }]}
+              placeholder="user1, user2, user3"
+              placeholderTextColor="#999"
+              value={groupUserIds}
+              onChangeText={setGroupUserIds}
+              autoCapitalize="none"
+              autoCorrect={false}
+              multiline
+            />
+
+            <ThemedText style={styles.modalHint}>
+              Enter at least 2 user IDs, separated by commas. If no group name is provided, it will be auto-generated from participant names.
+            </ThemedText>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton, { borderColor }]}
+                onPress={() => {
+                  setGroupModalVisible(false);
+                  setGroupUserIds('');
+                  setGroupName('');
+                }}
+              >
+                <ThemedText>Cancel</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: tintColor }]}
+                onPress={handleCreateGroup}
+                disabled={creating}
+              >
+                {creating ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <ThemedText style={styles.createButtonText}>Create Group</ThemedText>
                 )}
               </TouchableOpacity>
             </View>
@@ -470,5 +657,17 @@ const styles = StyleSheet.create({
   createButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  // Milestone 10: Type selector button styles
+  typeSelectorButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+  },
+  typeSelectorSubtext: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
   },
 });

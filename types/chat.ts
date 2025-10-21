@@ -20,9 +20,14 @@ export interface Message {
   tempId?: string; // Temporary ID for pending messages
 }
 
+// Milestone 10: Conversation types
+export type ConversationType = 'direct' | 'group';
+
 export interface Conversation {
   id: string;
   participants: string[]; // Array of user IDs
+  type?: ConversationType; // Milestone 10: 'direct' or 'group'
+  groupName?: string; // Milestone 10: Auto-generated or custom name for groups
   lastMessage?: string; // Milestone 5: Preview text
   lastMessageTime?: Date; // Milestone 5: For sorting
   lastMessageSenderId?: string; // Milestone 5: Who sent it
