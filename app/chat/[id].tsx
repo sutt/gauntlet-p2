@@ -4,8 +4,9 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { sendMessage, subscribeToMessages } from '@/services/messages';
 import { getUser } from '@/services/users';
 import { Message } from '@/types/chat';
+import { formatMessageTime, getDateDividerText } from '@/utils/date-format';
 import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,6 +18,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Type for items in the FlatList (can be message or date divider)
+type ChatListItem =
+  | { type: 'message'; data: Message }
+  | { type: 'dateDivider'; data: { date: Date; text: string } };
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -69,6 +75,34 @@ export default function ChatScreen() {
     return unsubscribe;
   }, [id, user]);
 
+  // Process messages to insert date dividers
+  const chatListItems = useMemo(() => {
+    const items: ChatListItem[] = [];
+    let lastDate: string | null = null;
+
+    messages.forEach((message) => {
+      const messageDate = new Date(message.timestamp);
+      const dateDividerText = getDateDividerText(messageDate);
+
+      // Add date divider if date changed
+      if (dateDividerText !== lastDate) {
+        items.push({
+          type: 'dateDivider',
+          data: { date: messageDate, text: dateDividerText },
+        });
+        lastDate = dateDividerText;
+      }
+
+      // Add message
+      items.push({
+        type: 'message',
+        data: message,
+      });
+    });
+
+    return items;
+  }, [messages]);
+
   const handleSend = async () => {
     if (!inputText.trim() || !user || !id) return;
 
@@ -91,8 +125,23 @@ export default function ChatScreen() {
     }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isOwnMessage = item.senderId === user?.uid;
+  const renderChatItem = ({ item }: { item: ChatListItem }) => {
+    // Render date divider
+    if (item.type === 'dateDivider') {
+      return (
+        <View style={styles.dateDividerContainer}>
+          <View style={styles.dateDividerLine} />
+          <ThemedText style={styles.dateDividerText}>
+            {item.data.text}
+          </ThemedText>
+          <View style={styles.dateDividerLine} />
+        </View>
+      );
+    }
+
+    // Render message
+    const message = item.data;
+    const isOwnMessage = message.senderId === user?.uid;
 
     return (
       <View
@@ -104,7 +153,7 @@ export default function ChatScreen() {
         {/* Show sender name for other users' messages */}
         {!isOwnMessage && (
           <ThemedText style={styles.senderName}>
-            {item.senderName}
+            {message.senderName}
           </ThemedText>
         )}
         <View
@@ -121,7 +170,7 @@ export default function ChatScreen() {
               isOwnMessage ? { color: '#fff' } : { color: '#000' },
             ]}
           >
-            {item.text}
+            {message.text}
           </ThemedText>
           <ThemedText
             style={[
@@ -129,7 +178,7 @@ export default function ChatScreen() {
               isOwnMessage ? { color: '#fff' } : { color: '#000' },
             ]}
           >
-            {formatTime(item.timestamp)}
+            {formatMessageTime(message.timestamp)}
           </ThemedText>
         </View>
       </View>
@@ -160,9 +209,13 @@ export default function ChatScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : insets.bottom}
     >
       <FlatList
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        data={chatListItems}
+        renderItem={renderChatItem}
+        keyExtractor={(item, index) =>
+          item.type === 'message'
+            ? item.data.id
+            : `divider-${item.data.text}-${index}`
+        }
         contentContainerStyle={styles.messagesList}
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
@@ -210,15 +263,6 @@ export default function ChatScreen() {
       </View>
     </KeyboardAvoidingView>
   );
-}
-
-function formatTime(date: Date): string {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const formattedHours = hours % 12 || 12;
-  const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
-  return `${formattedHours}:${formattedMinutes} ${ampm}`;
 }
 
 const styles = StyleSheet.create({
@@ -299,5 +343,23 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  dateDividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+    paddingHorizontal: 16,
+  },
+  dateDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E5EA',
+  },
+  dateDividerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    opacity: 0.6,
+    marginHorizontal: 12,
+    textTransform: 'uppercase',
   },
 });
