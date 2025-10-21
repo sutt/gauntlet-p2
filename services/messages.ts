@@ -23,6 +23,23 @@ const timestampToDate = (timestamp: any): Date => {
 };
 
 /**
+ * Convert Firestore readBy map to Record<string, Date>
+ * MILESTONE 9: Parse readBy field with timestamps
+ */
+const convertReadBy = (readByData: any): Record<string, Date> | undefined => {
+  if (!readByData || typeof readByData !== 'object') {
+    return undefined;
+  }
+
+  const readBy: Record<string, Date> = {};
+  Object.keys(readByData).forEach((userId) => {
+    readBy[userId] = timestampToDate(readByData[userId]);
+  });
+
+  return readBy;
+};
+
+/**
  * Convert Firestore document to Message object
  */
 const convertDocToMessage = (doc: any): Message => {
@@ -34,6 +51,8 @@ const convertDocToMessage = (doc: any): Message => {
     senderName: data.senderName || 'Unknown',
     timestamp: timestampToDate(data.timestamp),
     conversationId: data.conversationId,
+    // Milestone 9: Read receipts
+    readBy: convertReadBy(data.readBy),
   };
 };
 
@@ -56,6 +75,10 @@ export const sendMessage = async (
       senderName: userName,
       text,
       timestamp: Timestamp.now(),
+      // Milestone 9: Mark as read by sender immediately
+      readBy: {
+        [userId]: Timestamp.now(),
+      },
     };
 
     const batch = writeBatch(db);
@@ -125,5 +148,38 @@ export const subscribeToMessages = (
       onError(error);
     }
     return () => {};
+  }
+};
+
+/**
+ * MILESTONE 9: Mark messages as read
+ * Adds current user to the readBy map for each message
+ * MANUAL: Ensure Firestore security rules allow users to update readBy field
+ */
+export const markMessagesAsRead = async (
+  conversationId: string,
+  messageIds: string[],
+  userId: string
+): Promise<void> => {
+  try {
+    if (messageIds.length === 0) {
+      return; // Nothing to mark
+    }
+
+    const batch = writeBatch(db);
+
+    // Update each message to add user to readBy map
+    messageIds.forEach((messageId) => {
+      const messageRef = doc(db, 'conversations', conversationId, 'messages', messageId);
+      batch.update(messageRef, {
+        [`readBy.${userId}`]: Timestamp.now(),
+      });
+    });
+
+    await batch.commit();
+    console.log(`Marked ${messageIds.length} messages as read for user ${userId}`);
+  } catch (error) {
+    console.error('Error marking messages as read:', error);
+    throw error;
   }
 };

@@ -12,6 +12,9 @@ export interface Message {
   timestamp: Date;
   conversationId: string;
 
+  // Milestone 9: Read receipts - map of userId -> timestamp when they read it
+  readBy?: Record<string, Date>;
+
   // Milestone 7: Optimistic UI fields (client-only, not stored in Firestore)
   status?: MessageStatus; // 'sending' | 'sent' | 'failed'
   tempId?: string; // Temporary ID for pending messages

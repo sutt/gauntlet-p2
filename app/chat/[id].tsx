@@ -1,14 +1,14 @@
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/auth';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { sendMessage, subscribeToMessages } from '@/services/messages';
+import { sendMessage, subscribeToMessages, markMessagesAsRead } from '@/services/messages';
 import { getUser } from '@/services/users';
 import { getConversation } from '@/services/conversations';
 import { Message, User } from '@/types/chat';
 import { formatMessageTime, getDateDividerText } from '@/utils/date-format';
 import { formatLastSeen, isUserOnline } from '@/services/presence';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -105,6 +105,33 @@ export default function ChatScreen() {
     return unsubscribe;
   }, [id, user]);
 
+  // Milestone 9: Auto-mark messages as read when viewing conversation
+  // Debounced to avoid too many writes
+  useEffect(() => {
+    if (!id || !user || messages.length === 0) return;
+
+    // Find messages that current user hasn't read yet
+    const unreadMessageIds = messages
+      .filter((msg) => {
+        // Don't mark own messages
+        if (msg.senderId === user.uid) return false;
+        // Check if not already read by current user
+        return !msg.readBy || !msg.readBy[user.uid];
+      })
+      .map((msg) => msg.id);
+
+    if (unreadMessageIds.length === 0) return;
+
+    // Debounce marking as read (wait 500ms after messages load)
+    const timer = setTimeout(() => {
+      markMessagesAsRead(id, unreadMessageIds, user.uid).catch((error) => {
+        console.error('Error marking messages as read:', error);
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [id, user, messages]);
+
   // Milestone 7: Combine server messages with pending (optimistic) messages
   const allMessages = useMemo(() => {
     return [...messages, ...pendingMessages];
@@ -169,6 +196,24 @@ export default function ChatScreen() {
       );
     }
   };
+
+  // Milestone 9: Helper function to get read receipt status
+  const getReadReceiptStatus = useCallback((message: Message): 'sent' | 'read' | null => {
+    // Only show for own messages
+    if (message.senderId !== user?.uid) return null;
+
+    // Don't show for pending messages
+    if (message.status === 'sending' || message.status === 'failed') return null;
+
+    // Check if any other participant has read it
+    if (!message.readBy) return 'sent';
+
+    const otherParticipantsRead = Object.keys(message.readBy).some(
+      (userId) => userId !== user?.uid
+    );
+
+    return otherParticipantsRead ? 'read' : 'sent';
+  }, [user]);
 
   const handleSend = async () => {
     if (!inputText.trim() || !user || !id) return;
@@ -276,6 +321,33 @@ export default function ChatScreen() {
               {message.status === 'sending' && ' • Sending...'}
               {message.status === 'failed' && ' • Failed'}
             </ThemedText>
+            {/* Milestone 9: Read receipts - show checkmarks for own messages */}
+            {isOwnMessage && !message.status && (() => {
+              const receiptStatus = getReadReceiptStatus(message);
+              if (!receiptStatus) return null;
+
+              return (
+                <View style={styles.readReceiptContainer}>
+                  {receiptStatus === 'read' ? (
+                    // Double checkmark for read
+                    <View style={styles.doubleCheckmark}>
+                      <Ionicons
+                        name="checkmark-done"
+                        size={14}
+                        color={isOwnMessage ? '#4CD964' : '#999'}
+                      />
+                    </View>
+                  ) : (
+                    // Single checkmark for sent
+                    <Ionicons
+                      name="checkmark"
+                      size={14}
+                      color={isOwnMessage ? '#fff' : '#999'}
+                    />
+                  )}
+                </View>
+              );
+            })()}
           </View>
         </View>
         {/* Milestone 7: Retry button for failed messages */}
@@ -490,6 +562,14 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: 11,
     opacity: 0.7,
+  },
+  // Milestone 9: Read receipt styles
+  readReceiptContainer: {
+    marginLeft: 4,
+    justifyContent: 'center',
+  },
+  doubleCheckmark: {
+    // Container for double checkmark icon
   },
   retryButton: {
     marginTop: 4,

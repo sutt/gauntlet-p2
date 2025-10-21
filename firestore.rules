@@ -15,9 +15,20 @@ service cloud.firestore {
     // Users collection: Users can read all users (for search/display names)
     // but can only write their own document
     match /users/{userId} {
+      // Anyone authenticated can read user profiles (for display names and online status)
       allow read: if isSignedIn();
+
+      // Users can create their own profile
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && request.auth.uid == userId;
+
+      // Users can update their own profile
+      // MILESTONE 8: Allow updating lastSeen and online fields for presence tracking
+      // MILESTONE 9: Allow updating displayName if needed
+      allow update: if isSignedIn()
+                    && request.auth.uid == userId
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['lastSeen', 'online', 'displayName', 'pushTokens']);
+
       allow delete: if false; // No deletion for MVP
     }
 
@@ -40,8 +51,12 @@ service cloud.firestore {
                       && isParticipant(conversationId)
                       && request.auth.uid == request.resource.data.senderId;
 
-        // Can update only to add yourself to readBy map (for read receipts - future milestone)
-        allow update: if isSignedIn() && isParticipant(conversationId);
+        // MILESTONE 9: Can update to add yourself to readBy map
+        // Only allow updating the readBy field, and only to add your own userId
+        allow update: if isSignedIn()
+                      && isParticipant(conversationId)
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
+                      && request.auth.uid in request.resource.data.readBy;
 
         allow delete: if false; // No deletion for MVP
       }
