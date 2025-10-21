@@ -18,8 +18,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize Auth
-// MANUAL INTERVENTION: Make sure to enable an auth provider (e.g. Email/Password) in your Firebase console.
+// MANUAL: Make sure to enable an auth provider (e.g. Email/Password) in your Firebase console.
 export const auth = getAuth(app);
 
 // Initialize Firestore
+// MANUAL: After implementing chat features, deploy Firestore security rules using:
+//   firebase deploy --only firestore:rules
+// See firestore.rules file in project root and .dev-docs/milestone1-testing.md for details
 export const db = getFirestore(app);
