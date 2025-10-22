@@ -8,9 +8,10 @@ import { Message, User } from '@/types/chat';
 import { formatMessageTime, getDateDividerText } from '@/utils/date-format';
 import { formatLastSeen, isUserOnline } from '@/services/presence';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -47,6 +48,9 @@ export default function ChatScreen() {
   const [olderMessages, setOlderMessages] = useState<Message[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  // Milestone 13: Auto-scroll functionality
+  const flatListRef = useRef<FlatList>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -121,6 +125,12 @@ export default function ChatScreen() {
       (error) => {
         console.error('Error subscribing to messages:', error);
         setLoading(false);
+        // Milestone 13: Better error messages
+        Alert.alert(
+          'Connection Error',
+          'Unable to load messages. Please check your internet connection and try again.',
+          [{ text: 'OK' }]
+        );
       }
     );
 
@@ -159,6 +169,17 @@ export default function ChatScreen() {
   const allMessages = useMemo(() => {
     return [...olderMessages, ...messages, ...pendingMessages];
   }, [olderMessages, messages, pendingMessages]);
+
+  // Milestone 13: Auto-scroll to bottom when new messages arrive or when sending
+  useEffect(() => {
+    if (shouldAutoScroll && allMessages.length > 0 && !loading) {
+      // Small delay to ensure FlatList has rendered
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [allMessages.length, shouldAutoScroll, loading]);
 
   // Process messages to insert date dividers
   const chatListItems = useMemo(() => {
@@ -260,8 +281,14 @@ export default function ChatScreen() {
         setOlderMessages((prev) => [...newOlderMessages, ...prev]);
         setLastMessageSnapshot(lastSnapshot);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading more messages:', error);
+      // Milestone 13: Better error messages
+      Alert.alert(
+        'Could Not Load Messages',
+        'Failed to load older messages. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setLoadingMore(false);
     }
@@ -298,7 +325,7 @@ export default function ChatScreen() {
 
       // Milestone 7: Remove from pending messages on success (will appear in server messages)
       setPendingMessages((prev) => prev.filter((m) => m.tempId !== tempId));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error);
       // Milestone 7: Mark as failed (keep in pending for retry)
       setPendingMessages((prev) =>
@@ -306,6 +333,11 @@ export default function ChatScreen() {
           m.tempId === tempId ? { ...m, status: 'failed' as const } : m
         )
       );
+      // Milestone 13: Show error to user
+      const errorMessage = error?.message?.includes('permission')
+        ? 'You do not have permission to send messages in this conversation.'
+        : 'Failed to send message. Please check your connection and tap "Retry" to try again.';
+      Alert.alert('Message Failed', errorMessage, [{ text: 'OK' }]);
     } finally {
       setSending(false);
     }
@@ -478,6 +510,7 @@ export default function ChatScreen() {
       </View>
 
       <FlatList
+        ref={flatListRef}
         data={chatListItems}
         renderItem={renderChatItem}
         keyExtractor={(item, index) =>
@@ -487,6 +520,13 @@ export default function ChatScreen() {
         }
         contentContainerStyle={styles.messagesList}
         keyboardShouldPersistTaps="handled"
+        onScroll={(event) => {
+          // Milestone 13: Detect if user scrolled up manually
+          const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+          const isNearBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < 50;
+          setShouldAutoScroll(isNearBottom);
+        }}
+        scrollEventThrottle={400}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <ThemedText style={styles.emptyText}>

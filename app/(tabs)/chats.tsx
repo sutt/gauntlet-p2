@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
@@ -28,6 +29,7 @@ export default function ChatsScreen() {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // Milestone 13: Pull-to-refresh state
   const [modalVisible, setModalVisible] = useState(false);
   const [newUserId, setNewUserId] = useState('');
   const [creating, setCreating] = useState(false);
@@ -90,7 +92,15 @@ export default function ChatsScreen() {
         console.error('❌ ChatsScreen: Error subscribing to conversations:', error);
         console.error('❌ ChatsScreen: Error details:', error.message);
         setLoading(false);
-        Alert.alert('Error', 'Failed to load conversations. Please try again.');
+        // Milestone 13: Better error messages
+        Alert.alert(
+          'Connection Error',
+          'Unable to load your conversations. Please check your internet connection and try again.',
+          [
+            { text: 'Dismiss', style: 'cancel' },
+            { text: 'Retry', onPress: () => window.location.reload() }
+          ]
+        );
       }
     );
 
@@ -99,6 +109,36 @@ export default function ChatsScreen() {
 
   const handleConversationPress = (conversationId: string) => {
     router.push(`/chat/${conversationId}`);
+  };
+
+  // Milestone 13: Pull-to-refresh handler
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    // The subscription will automatically update conversations
+    // Just need to refetch user profiles for any new participants
+    try {
+      const allParticipants = new Set<string>();
+      conversations.forEach(conv => {
+        conv.participants.forEach(p => {
+          if (p !== user?.uid) {
+            allParticipants.add(p);
+          }
+        });
+      });
+
+      if (allParticipants.size > 0) {
+        const users = await getUsers(Array.from(allParticipants));
+        const newCache: Record<string, User> = {};
+        users.forEach(u => {
+          newCache[u.id] = u;
+        });
+        setUserCache(prev => ({ ...prev, ...newCache }));
+      }
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleCreateConversation = async () => {
@@ -137,9 +177,15 @@ export default function ChatsScreen() {
 
       // Navigate to the new conversation
       router.push(`/chat/${conversationId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating conversation:', error);
-      Alert.alert('Error', 'Failed to create conversation. Please try again.');
+      // Milestone 13: Better error messages with specific details
+      const errorMessage = error?.message?.includes('permission')
+        ? 'You do not have permission to create a conversation with this user.'
+        : error?.message?.includes('not-found')
+        ? 'The user ID you entered does not exist. Please check and try again.'
+        : 'Failed to create conversation. Please check your internet connection and try again.';
+      Alert.alert('Could Not Create Conversation', errorMessage);
     } finally {
       setCreating(false);
     }
@@ -187,9 +233,15 @@ export default function ChatsScreen() {
 
       // Navigate to the new group conversation
       router.push(`/chat/${conversationId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating group:', error);
-      Alert.alert('Error', 'Failed to create group. Please try again.');
+      // Milestone 13: Better error messages with specific details
+      const errorMessage = error?.message?.includes('permission')
+        ? 'You do not have permission to create a group with these users.'
+        : error?.message?.includes('not-found')
+        ? 'One or more user IDs do not exist. Please check and try again.'
+        : 'Failed to create group. Please check your internet connection and try again.';
+      Alert.alert('Could Not Create Group', errorMessage);
     } finally {
       setCreating(false);
     }
@@ -310,6 +362,14 @@ export default function ChatsScreen() {
         renderItem={renderConversationItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={conversations.length === 0 ? styles.emptyContainer : undefined}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={tintColor}
+            colors={[tintColor]}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <ThemedText style={styles.emptyText}>No conversations yet</ThemedText>
