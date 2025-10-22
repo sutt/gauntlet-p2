@@ -1,5 +1,6 @@
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/auth';
+import { useNotifications } from '@/context/notifications';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { sendMessage, subscribeToMessages, markMessagesAsRead, loadMoreMessages } from '@/services/messages';
 import { getUser } from '@/services/users';
@@ -32,6 +33,7 @@ type ChatListItem =
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const { setCurrentConversation } = useNotifications();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -56,6 +58,21 @@ export default function ChatScreen() {
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
   const textColor = useThemeColor({}, 'text');
+
+  // Milestone 14: Notify NotificationsProvider when entering/exiting this conversation
+  // This prevents notifications from being shown for messages in the current conversation
+  useEffect(() => {
+    if (!id) return;
+
+    console.log('🔔 ChatScreen: Setting current conversation to:', id);
+    setCurrentConversation(id);
+
+    // Clear current conversation when leaving this screen
+    return () => {
+      console.log('🔔 ChatScreen: Clearing current conversation');
+      setCurrentConversation(null);
+    };
+  }, [id, setCurrentConversation]);
 
   // Fetch current user's display name
   useEffect(() => {
