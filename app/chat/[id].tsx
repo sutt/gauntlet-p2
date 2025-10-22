@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/auth';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { sendMessage, subscribeToMessages, markMessagesAsRead } from '@/services/messages';
+import { sendMessage, subscribeToMessages, markMessagesAsRead, loadMoreMessages } from '@/services/messages';
 import { getUser } from '@/services/users';
 import { getConversation } from '@/services/conversations';
 import { Message, User } from '@/types/chat';
@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import type { QueryDocumentSnapshot } from 'firebase/firestore';
 
 // Type for items in the FlatList (can be message or date divider)
 type ChatListItem =
@@ -41,6 +42,11 @@ export default function ChatScreen() {
   const [otherUser, setOtherUser] = useState<User | null>(null); // Milestone 8: Other user profile
   const [isGroupChat, setIsGroupChat] = useState(false); // Milestone 10: Track if conversation is a group
   const [groupName, setGroupName] = useState<string>(''); // Milestone 10: Store group name
+  // Milestone 12: Pagination state
+  const [lastMessageSnapshot, setLastMessageSnapshot] = useState<QueryDocumentSnapshot | null>(null);
+  const [olderMessages, setOlderMessages] = useState<Message[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -95,6 +101,7 @@ export default function ChatScreen() {
   }, [id, user]);
 
   // Subscribe to real-time messages
+  // Milestone 12: Enhanced to handle pagination snapshot
   useEffect(() => {
     if (!id || !user) {
       setLoading(false);
@@ -103,9 +110,13 @@ export default function ChatScreen() {
 
     const unsubscribe = subscribeToMessages(
       id,
-      (newMessages) => {
+      (newMessages, snapshot) => {
         setMessages(newMessages);
+        setLastMessageSnapshot(snapshot);
         setLoading(false);
+        // Reset pagination state on new subscription
+        setOlderMessages([]);
+        setHasMoreMessages(true);
       },
       (error) => {
         console.error('Error subscribing to messages:', error);
@@ -144,9 +155,10 @@ export default function ChatScreen() {
   }, [id, user, messages]);
 
   // Milestone 7: Combine server messages with pending (optimistic) messages
+  // Milestone 12: Include older loaded messages
   const allMessages = useMemo(() => {
-    return [...messages, ...pendingMessages];
-  }, [messages, pendingMessages]);
+    return [...olderMessages, ...messages, ...pendingMessages];
+  }, [olderMessages, messages, pendingMessages]);
 
   // Process messages to insert date dividers
   const chatListItems = useMemo(() => {
@@ -225,6 +237,35 @@ export default function ChatScreen() {
 
     return otherParticipantsRead ? 'read' : 'sent';
   }, [user]);
+
+  // Milestone 12: Load older messages
+  const handleLoadMore = useCallback(async () => {
+    if (!id || !lastMessageSnapshot || loadingMore || !hasMoreMessages) {
+      return;
+    }
+
+    setLoadingMore(true);
+    try {
+      const { messages: newOlderMessages, lastSnapshot } = await loadMoreMessages(
+        id,
+        lastMessageSnapshot,
+        50
+      );
+
+      if (newOlderMessages.length === 0) {
+        // No more messages to load
+        setHasMoreMessages(false);
+      } else {
+        // Prepend older messages
+        setOlderMessages((prev) => [...newOlderMessages, ...prev]);
+        setLastMessageSnapshot(lastSnapshot);
+      }
+    } catch (error) {
+      console.error('Error loading more messages:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [id, lastMessageSnapshot, loadingMore, hasMoreMessages]);
 
   const handleSend = async () => {
     if (!inputText.trim() || !user || !id) return;
@@ -453,6 +494,29 @@ export default function ChatScreen() {
             </ThemedText>
           </View>
         }
+        ListHeaderComponent={
+          // Milestone 12: Load More button at top of chat
+          hasMoreMessages && messages.length >= 50 ? (
+            <View style={styles.loadMoreContainer}>
+              <TouchableOpacity
+                style={[styles.loadMoreButton, { borderColor }]}
+                onPress={handleLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color={tintColor} />
+                ) : (
+                  <>
+                    <Ionicons name="arrow-up" size={16} color={tintColor} />
+                    <ThemedText style={[styles.loadMoreText, { color: tintColor }]}>
+                      Load older messages
+                    </ThemedText>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : null
+        }
       />
 
       <View
@@ -654,5 +718,23 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     marginHorizontal: 12,
     textTransform: 'uppercase',
+  },
+  // Milestone 12: Load More button styles
+  loadMoreContainer: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  loadMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

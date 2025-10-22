@@ -10,6 +10,9 @@ import {
   writeBatch,
   getDoc,
   increment,
+  startAfter,
+  getDocs,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Message } from '@/types/chat';
@@ -126,11 +129,12 @@ export const sendMessage = async (
 
 /**
  * Subscribe to messages in a conversation (real-time updates)
+ * MILESTONE 12: Enhanced to return last snapshot for pagination
  * MANUAL: Ensure Firestore security rules allow authenticated users to read conversations/{conversationId}/messages
  */
 export const subscribeToMessages = (
   conversationId: string,
-  callback: (messages: Message[]) => void,
+  callback: (messages: Message[], lastSnapshot: QueryDocumentSnapshot | null) => void,
   onError?: (error: Error) => void,
   messageLimit: number = 50
 ): (() => void) => {
@@ -148,7 +152,11 @@ export const subscribeToMessages = (
         const messages = querySnapshot.docs
           .map(convertDocToMessage)
           .reverse(); // Oldest first for display
-        callback(messages);
+
+        // Get the last document snapshot for pagination
+        const lastSnapshot = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+
+        callback(messages, lastSnapshot);
       },
       (error) => {
         console.error('Error in messages subscription:', error);
@@ -204,6 +212,63 @@ export const markMessagesAsRead = async (
     console.log(`Marked ${messageIds.length} messages as read and reset unread count for user ${userId}`);
   } catch (error) {
     console.error('Error marking messages as read:', error);
+    throw error;
+  }
+};
+
+/**
+ * MILESTONE 12: Load more messages with pagination
+ * Loads older messages using cursor-based pagination
+ * MANUAL: Ensure Firestore security rules allow authenticated users to read conversations/{conversationId}/messages
+ *
+ * @param conversationId - The conversation ID
+ * @param lastMessageSnapshot - The last message document snapshot from previous load
+ * @param limitCount - Number of messages to load (default: 50)
+ * @returns Array of older messages and the new last message snapshot for next pagination
+ */
+export const loadMoreMessages = async (
+  conversationId: string,
+  lastMessageSnapshot: QueryDocumentSnapshot | null,
+  limitCount: number = 50
+): Promise<{ messages: Message[]; lastSnapshot: QueryDocumentSnapshot | null }> => {
+  try {
+    const messagesRef = collection(db, 'conversations', conversationId, 'messages');
+
+    // Build query with cursor pagination
+    let q;
+    if (lastMessageSnapshot) {
+      q = query(
+        messagesRef,
+        orderBy('timestamp', 'desc'),
+        startAfter(lastMessageSnapshot),
+        limit(limitCount)
+      );
+    } else {
+      // Initial load - just get the first batch
+      q = query(
+        messagesRef,
+        orderBy('timestamp', 'desc'),
+        limit(limitCount)
+      );
+    }
+
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      console.log('No more messages to load');
+      return { messages: [], lastSnapshot: null };
+    }
+
+    const messages = snapshot.docs
+      .map(convertDocToMessage)
+      .reverse(); // Reverse to show oldest first
+
+    const newLastSnapshot = snapshot.docs[snapshot.docs.length - 1] || null;
+
+    console.log(`Loaded ${messages.length} older messages`);
+    return { messages, lastSnapshot: newLastSnapshot };
+  } catch (error) {
+    console.error('Error loading more messages:', error);
     throw error;
   }
 };
