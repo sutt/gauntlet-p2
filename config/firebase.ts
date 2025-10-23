@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 
 // Firebase configuration loaded from environment variables
 // Copy .env.example to .env.local and fill in your values
@@ -26,3 +26,21 @@ export const auth = getAuth(app);
 //   firebase deploy --only firestore:rules
 // See firestore.rules file in project root and .dev-docs/milestone1-testing.md for details
 export const db = getFirestore(app);
+
+// Connect to Firebase Emulators in development mode
+// Set EXPO_PUBLIC_USE_EMULATOR=true in .env.local to enable
+if (__DEV__ && process.env.EXPO_PUBLIC_USE_EMULATOR === 'true') {
+  const authHost = process.env.EXPO_PUBLIC_AUTH_EMULATOR_HOST || 'localhost';
+  const authPort = process.env.EXPO_PUBLIC_AUTH_EMULATOR_PORT || '9099';
+  const firestoreHost = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_HOST || 'localhost';
+  const firestorePort = process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || '8080';
+
+  // Note: Use 10.0.2.2 instead of localhost when running on Android emulator
+  connectAuthEmulator(auth, `http://${authHost}:${authPort}`, { disableWarnings: true });
+  connectFirestoreEmulator(db, firestoreHost, parseInt(firestorePort));
+
+  console.log('🔧 Connected to Firebase Emulators:');
+  console.log(`  - Auth: ${authHost}:${authPort}`);
+  console.log(`  - Firestore: ${firestoreHost}:${firestorePort}`);
+  console.log('  - UI: http://localhost:4000');
+}

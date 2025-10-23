@@ -47,3 +47,7 @@ app-example
 
 # Agro worktrees
 trees/
+
+# firebase emulator
+firebase*.log
+firestore*log
