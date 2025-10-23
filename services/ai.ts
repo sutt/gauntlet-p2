@@ -1,21 +1,11 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../config/firebase';
-
-/**
- * Request/Response types for AI functions
- */
-export interface HelloWorldRequest {
-  message: string;
-}
-
-export interface HelloWorldResponse {
-  success: boolean;
-  input: string;
-  output: string;
-  timestamp: string;
-  userId: string;
-  model: string;
-}
+import type {
+  HelloWorldRequest,
+  HelloWorldResponse,
+  TranslationRequest,
+  TranslationResponse,
+} from '../types/ai';
 
 /**
  * Test AI function - sends a message and gets AI response
@@ -41,6 +31,36 @@ export const testAI = async (message: string): Promise<HelloWorldResponse> => {
 
     // Extract useful error message
     const errorMessage = error.message || error.code || 'Failed to call AI function';
+    throw new Error(errorMessage);
+  }
+};
+
+/**
+ * Translate text using AI
+ *
+ * Translates text with conversation context awareness.
+ * Can auto-detect source language and provide cultural insights.
+ *
+ * @param request - Translation request with text, target language, and optional context
+ * @returns Translation response with translated text, alternatives, and cultural notes
+ * @throws Error if translation fails or user is not authenticated
+ */
+export const translateMessage = async (
+  request: TranslationRequest
+): Promise<TranslationResponse> => {
+  const callable = httpsCallable<TranslationRequest, TranslationResponse>(
+    functions,
+    'translateMessage'
+  );
+
+  try {
+    const result = await callable(request);
+    return result.data;
+  } catch (error: any) {
+    console.error('Error translating message:', error);
+
+    // Extract useful error message
+    const errorMessage = error.message || error.code || 'Translation failed';
     throw new Error(errorMessage);
   }
 };

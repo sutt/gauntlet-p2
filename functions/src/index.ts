@@ -1,5 +1,21 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import { openaiApiKey, getOpenAIKey } from './config';
+import { translateText, TranslationRequestSchema } from './agents/translationAgent';
+import {
+  getConversationContext,
+  getParticipantNames,
+  getSenderName,
+} from './services/contextRetrieval';
+
+// Initialize Firebase Admin SDK
+// Required because we use Firestore at module level (in this file and contextRetrieval.ts)
+// In production, this auto-configures from the environment
+// In Functions shell, this must be explicit
+initializeApp();
+
+const db = getFirestore();
 
 /**
  * Hello World AI Function
@@ -117,6 +133,113 @@ export const helloWorldAI = onCall(
 
       // Wrap other errors
       throw new HttpsError('internal', `Function error: ${error.message}`);
+    }
+  }
+);
+
+/**
+ * Translation Cloud Function
+ *
+ * Translates text with conversation context awareness.
+ * Uses AI SDK for intelligent translation with cultural understanding.
+ *
+ * Features:
+ * - Auto-detects source language
+ * - Provides alternative translations
+ * - Explains idioms and cultural references
+ * - Uses conversation context for better accuracy
+ */
+export const translateMessage = onCall(
+  {
+    secrets: [openaiApiKey],
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 60,
+    invoker: 'public',
+    cors: [
+      'http://localhost:8081',
+      'http://localhost:19006',
+      /^https:\/\/.*\.vercel\.app$/,
+    ],
+  },
+  async (request) => {
+    const startTime = Date.now();
+
+    // Authentication check
+    const disableAuthCheck = process.env.DISABLE_AUTH_CHECK === 'true';
+    if (!disableAuthCheck && !request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be authenticated');
+    }
+
+    const userId = request.auth?.uid || 'shell-test-user';
+
+    try {
+      // Validate input
+      const validationResult = TranslationRequestSchema.safeParse(request.data);
+      if (!validationResult.success) {
+        throw new HttpsError(
+          'invalid-argument',
+          `Invalid request: ${validationResult.error.message}`
+        );
+      }
+
+      const translationRequest = validationResult.data;
+
+      // If conversation context provided, fetch it
+      if (translationRequest.context?.conversationId) {
+        const conversationId = translationRequest.context.conversationId;
+
+        // Verify user has access to this conversation
+        const convDoc = await db.collection('conversations').doc(conversationId).get();
+
+        if (!convDoc.exists) {
+          throw new HttpsError('not-found', 'Conversation not found');
+        }
+
+        const participants = convDoc.data()?.participants || [];
+        if (!disableAuthCheck && !participants.includes(userId)) {
+          throw new HttpsError('permission-denied', 'Not a participant in this conversation');
+        }
+
+        // Fetch context
+        const recentMessages = await getConversationContext(conversationId, 5);
+        const participantNames = await getParticipantNames(conversationId);
+
+        // Enhance request with context
+        translationRequest.context = {
+          ...translationRequest.context,
+          recentMessages,
+          recipientNames: participantNames.filter((name) => name !== 'Unknown'),
+        };
+      }
+
+      // Get sender name
+      if (!translationRequest.context?.senderName && !disableAuthCheck) {
+        const senderName = await getSenderName(userId);
+        if (!translationRequest.context) {
+          translationRequest.context = {};
+        }
+        translationRequest.context.senderName = senderName;
+      }
+
+      // Perform translation
+      const result = await translateText(translationRequest);
+
+      console.log(`Translation completed in ${Date.now() - startTime}ms for user ${userId}`);
+
+      return {
+        success: true,
+        ...result,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      console.error('Error in translateMessage:', error);
+
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      throw new HttpsError('internal', `Translation error: ${error.message}`);
     }
   }
 );
