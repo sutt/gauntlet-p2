@@ -31,7 +31,10 @@ export const helloWorldAI = onCall(
   },
   async (request) => {
     // 1. Authentication check
-    if (!request.auth) {
+    // Can be disabled for local shell testing via DISABLE_AUTH_CHECK env var
+    const disableAuthCheck = process.env.DISABLE_AUTH_CHECK === 'true';
+
+    if (!disableAuthCheck && !request.auth) {
       throw new HttpsError(
         'unauthenticated',
         'User must be authenticated to call this function.'
@@ -101,7 +104,7 @@ export const helloWorldAI = onCall(
         input: message,
         output: aiResponse,
         timestamp: new Date().toISOString(),
-        userId: request.auth.uid,
+        userId: request.auth?.uid || 'shell-test-user',
         model: 'gpt-3.5-turbo',
       };
     } catch (error: any) {
