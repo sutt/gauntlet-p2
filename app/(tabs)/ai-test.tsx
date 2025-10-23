@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { testAI } from '../../services/ai';
+import { useAuth } from '../../context/auth';
 
 /**
  * AI Test Screen
@@ -23,12 +24,18 @@ import { testAI } from '../../services/ai';
  * 3. OpenAI API key set in functions/.env
  */
 export default function AITestScreen() {
+  const { user } = useAuth();
   const [message, setMessage] = useState('Hello, AI!');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleTest = async () => {
+    if (!user) {
+      Alert.alert('Not Logged In', 'You must be logged in to use AI functions. Please sign in first.');
+      return;
+    }
+
     if (!message.trim()) {
       Alert.alert('Error', 'Please enter a message');
       return;
@@ -56,6 +63,22 @@ export default function AITestScreen() {
         <Text style={styles.subtitle}>
           Test the helloWorldAI Cloud Function
         </Text>
+
+        {!user && (
+          <View style={styles.warningBox}>
+            <Text style={styles.warningText}>
+              ⚠️ You are not logged in. Please sign in to use AI functions.
+            </Text>
+          </View>
+        )}
+
+        {user && (
+          <View style={styles.successBox}>
+            <Text style={styles.successText}>
+              ✅ Logged in as: {user.email}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.label}>Your Message</Text>
@@ -231,5 +254,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     color: '#666',
+  },
+  warningBox: {
+    padding: 16,
+    backgroundColor: '#fff3cd',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ffc107',
+    marginBottom: 20,
+  },
+  warningText: {
+    fontSize: 14,
+    color: '#856404',
+    fontWeight: '600',
+  },
+  successBox: {
+    padding: 16,
+    backgroundColor: '#d4edda',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#28a745',
+    marginBottom: 20,
+  },
+  successText: {
+    fontSize: 14,
+    color: '#155724',
+    fontWeight: '600',
   },
 });

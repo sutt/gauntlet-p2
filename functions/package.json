@@ -16,11 +16,13 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "firebase-admin": "^13.0.2",
     "firebase-functions": "^6.2.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/node": "^22.10.5",
     "typescript": "^5.9.2"
   },

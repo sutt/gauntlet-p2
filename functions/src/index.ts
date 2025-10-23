@@ -20,6 +20,14 @@ export const helloWorldAI = onCall(
     region: 'us-central1',
     memory: '256MiB',
     timeoutSeconds: 30,
+    // Allow public invocation (authentication is handled by Firebase SDK)
+    invoker: 'public',
+    // Enable CORS for web development
+    cors: [
+      'http://localhost:8081',  // Expo web dev server
+      'http://localhost:19006', // Alternative Expo web port
+      /^https:\/\/.*\.vercel\.app$/, // Vercel deployments (if you deploy later)
+    ],
   },
   async (request) => {
     // 1. Authentication check
