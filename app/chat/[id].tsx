@@ -16,6 +16,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -24,6 +25,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
+import TranslationModal from '@/components/TranslationModal';
 
 // Type for items in the FlatList (can be message or date divider)
 type ChatListItem =
@@ -53,6 +55,14 @@ export default function ChatScreen() {
   // Milestone 13: Auto-scroll functionality
   const flatListRef = useRef<FlatList>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  // Translation modal state
+  const [translationModal, setTranslationModal] = useState<{
+    visible: boolean;
+    messageText: string;
+  }>({
+    visible: false,
+    messageText: '',
+  });
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -311,6 +321,14 @@ export default function ChatScreen() {
     }
   }, [id, lastMessageSnapshot, loadingMore, hasMoreMessages]);
 
+  // Handler for long-press on message to translate
+  const handleLongPressMessage = useCallback((message: Message) => {
+    setTranslationModal({
+      visible: true,
+      messageText: message.text,
+    });
+  }, []);
+
   const handleSend = async () => {
     if (!inputText.trim() || !user || !id) return;
 
@@ -397,7 +415,8 @@ export default function ChatScreen() {
             {isOwnMessage ? 'You' : message.senderName}
           </ThemedText>
         )}
-        <View
+        <Pressable
+          onLongPress={() => handleLongPressMessage(message)}
           style={[
             styles.messageBubble,
             isOwnMessage
@@ -456,7 +475,7 @@ export default function ChatScreen() {
               );
             })()}
           </View>
-        </View>
+        </Pressable>
         {/* Milestone 7: Retry button for failed messages */}
         {message.status === 'failed' && message.tempId && (
           <TouchableOpacity
@@ -610,6 +629,15 @@ export default function ChatScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Translation Modal */}
+      <TranslationModal
+        visible={translationModal.visible}
+        onClose={() => setTranslationModal({ visible: false, messageText: '' })}
+        messageText={translationModal.messageText}
+        conversationId={id}
+        defaultTargetLanguage="Spanish"
+      />
     </KeyboardAvoidingView>
   );
 }

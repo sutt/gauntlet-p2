@@ -9,7 +9,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { testAI } from '../../services/ai';
+import { testAI, translateMessage } from '../../services/ai';
 import { useAuth } from '../../context/auth';
 
 /**
@@ -25,10 +25,19 @@ import { useAuth } from '../../context/auth';
  */
 export default function AITestScreen() {
   const { user } = useAuth();
+
+  // Hello World AI Test
   const [message, setMessage] = useState('Hello, AI!');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Translation Test
+  const [translateText, setTranslateText] = useState('Hello, how are you?');
+  const [targetLanguage, setTargetLanguage] = useState('Spanish');
+  const [translationResult, setTranslationResult] = useState<any>(null);
+  const [translationLoading, setTranslationLoading] = useState(false);
+  const [translationError, setTranslationError] = useState('');
 
   const handleTest = async () => {
     if (!user) {
@@ -53,6 +62,40 @@ export default function AITestScreen() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTranslation = async () => {
+    if (!user) {
+      Alert.alert('Not Logged In', 'You must be logged in to use AI functions. Please sign in first.');
+      return;
+    }
+
+    if (!translateText.trim()) {
+      Alert.alert('Error', 'Please enter text to translate');
+      return;
+    }
+
+    if (!targetLanguage.trim()) {
+      Alert.alert('Error', 'Please enter target language');
+      return;
+    }
+
+    setTranslationLoading(true);
+    setTranslationError('');
+    setTranslationResult(null);
+
+    try {
+      const result = await translateMessage({
+        text: translateText.trim(),
+        targetLanguage: targetLanguage.trim(),
+      });
+      setTranslationResult(result);
+    } catch (err: any) {
+      console.error('Translation error:', err);
+      setTranslationError(err.message);
+    } finally {
+      setTranslationLoading(false);
     }
   };
 
@@ -135,6 +178,98 @@ export default function AITestScreen() {
               3. Make sure you're logged in{'\n'}
               4. Click "Test AI Function"
             </Text>
+          </View>
+        )}
+
+        {/* Translation Test Section */}
+        <View style={styles.divider} />
+
+        <Text style={styles.title}>Translation Test</Text>
+        <Text style={styles.subtitle}>
+          Test the translateMessage Cloud Function
+        </Text>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Text to Translate</Text>
+          <TextInput
+            style={styles.input}
+            value={translateText}
+            onChangeText={setTranslateText}
+            placeholder="Enter text to translate..."
+            multiline
+            numberOfLines={3}
+            editable={!translationLoading}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Target Language</Text>
+          <TextInput
+            style={styles.inputSmall}
+            value={targetLanguage}
+            onChangeText={setTargetLanguage}
+            placeholder="e.g., Spanish, French, Japanese..."
+            editable={!translationLoading}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.button, styles.buttonSecondary, translationLoading && styles.buttonDisabled]}
+          onPress={handleTranslation}
+          disabled={translationLoading}
+        >
+          {translationLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Translate</Text>
+          )}
+        </TouchableOpacity>
+
+        {translationError && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorTitle}>Translation Error</Text>
+            <Text style={styles.errorText}>{translationError}</Text>
+          </View>
+        )}
+
+        {translationResult && (
+          <View style={styles.translationResultBox}>
+            <Text style={styles.translationLabel}>Translation:</Text>
+            <Text style={styles.translationText}>{translationResult.translatedText}</Text>
+
+            <View style={styles.translationMeta}>
+              <Text style={styles.metaText}>
+                {translationResult.sourceLanguage} → {translationResult.targetLanguage}
+              </Text>
+              <Text style={styles.metaText}>
+                Confidence: {(translationResult.confidence * 100).toFixed(0)}%
+              </Text>
+            </View>
+
+            {translationResult.alternatives && translationResult.alternatives.length > 0 && (
+              <View style={styles.alternativesBox}>
+                <Text style={styles.alternativesLabel}>Alternative Translations:</Text>
+                {translationResult.alternatives.map((alt: string, idx: number) => (
+                  <Text key={idx} style={styles.alternativeText}>• {alt}</Text>
+                ))}
+              </View>
+            )}
+
+            {translationResult.culturalNotes && (
+              <View style={styles.notesBox}>
+                <Text style={styles.notesLabel}>Cultural Notes:</Text>
+                <Text style={styles.notesText}>{translationResult.culturalNotes}</Text>
+              </View>
+            )}
+
+            {translationResult.idiomExplanations && translationResult.idiomExplanations.length > 0 && (
+              <View style={styles.notesBox}>
+                <Text style={styles.notesLabel}>Idiom Explanations:</Text>
+                {translationResult.idiomExplanations.map((exp: string, idx: number) => (
+                  <Text key={idx} style={styles.notesText}>• {exp}</Text>
+                ))}
+              </View>
+            )}
           </View>
         )}
       </View>
@@ -280,5 +415,89 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#155724',
     fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#ddd',
+    marginVertical: 32,
+  },
+  inputSmall: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    backgroundColor: '#f8f8f8',
+  },
+  buttonSecondary: {
+    backgroundColor: '#28a745',
+  },
+  translationResultBox: {
+    padding: 16,
+    backgroundColor: '#f0fff4',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#28a745',
+  },
+  translationLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#28a745',
+    marginBottom: 8,
+  },
+  translationText: {
+    fontSize: 18,
+    lineHeight: 26,
+    color: '#000',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  translationMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#d4edda',
+    marginTop: 8,
+  },
+  metaText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  alternativesBox: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+  },
+  alternativesLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 6,
+  },
+  alternativeText: {
+    fontSize: 14,
+    color: '#333',
+    marginVertical: 2,
+  },
+  notesBox: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#fffbf0',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffc107',
+  },
+  notesLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#856404',
+    marginBottom: 6,
+  },
+  notesText: {
+    fontSize: 13,
+    color: '#856404',
+    lineHeight: 20,
   },
 });
