@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "962765253559",
+    "project_id": "will-msg-app-v2",
+    "storage_bucket": "will-msg-app-v2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:962765253559:android:0fddf12b4018467ec19632",
+        "android_client_info": {
+          "package_name": "com.wsutton.notarymsg"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "962765253559-saju0ij7ioo01etns8f1ukpnn6jf0llm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBF8j57D0c7mo0EjCpSlJbOzJg9bn75D1g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "962765253559-saju0ij7ioo01etns8f1ukpnn6jf0llm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
