@@ -9,7 +9,17 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_USE_EMULATOR": "false",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBtmcOVDjeLeAeWxIO9MzUoP8a4EtBZXHw",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "will-msg-app-v2.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "will-msg-app-v2",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "will-msg-app-v2.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "962765253559",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:962765253559:web:a783b7f1e3edf22ac19632",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-VZ41X1Q0MG"
+      }
     },
     "production": {
       "autoIncrement": true
