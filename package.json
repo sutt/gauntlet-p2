@@ -8,7 +8,12 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "functions:build": "cd functions && npm run build",
+    "functions:dev": "npm run functions:build && firebase emulators:start",
+    "functions:shell": "npm run functions:build && firebase functions:shell",
+    "functions:logs": "firebase functions:log",
+    "functions:deploy": "npm run functions:build && firebase deploy --only functions"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
