@@ -10,7 +10,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "functions:build": "cd functions && npm run build",
-    "functions:dev": "npm run functions:build && firebase emulators:start",
+    "functions:dev": "npm run functions:build && firebase emulators:start --import=.firebase-emulator-data --export-on-exit",
     "functions:shell": "npm run functions:build && firebase functions:shell",
     "functions:logs": "firebase functions:log",
     "functions:deploy": "npm run functions:build && firebase deploy --only functions"

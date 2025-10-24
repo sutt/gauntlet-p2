@@ -51,3 +51,4 @@ trees/
 # firebase emulator
 firebase*.log
 firestore*log
+.firebase-emulator-data/
