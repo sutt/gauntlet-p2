@@ -334,10 +334,6 @@ export const uploadProfileImage = async (
           // Upload complete, get download URL
           try {
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            console.log('✅ Profile image uploaded successfully!');
-            console.log('📍 Storage path:', storagePath);
-            console.log('🔗 Download URL:', downloadURL);
-            console.log('📦 File size:', blob.size, 'bytes');
 
             resolve({
               url: downloadURL,

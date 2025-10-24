@@ -27,14 +27,6 @@ export function Avatar({
   const initials = getInitials(displayName);
   const backgroundColor = getAvatarColor(userId);
 
-  // Debug logging
-  console.log('Avatar render:', {
-    userId,
-    displayName,
-    profileImageUrl,
-    hasImage: !!profileImageUrl,
-  });
-
   if (profileImageUrl) {
     // Show profile image
     return (
@@ -52,15 +44,6 @@ export function Avatar({
         contentFit="cover"
         cachePolicy="memory-disk"
         transition={200}
-        onError={(error) => {
-          console.error('❌ Avatar image failed to load:', {
-            url: profileImageUrl,
-            error,
-          });
-        }}
-        onLoad={() => {
-          console.log('✅ Avatar image loaded successfully:', profileImageUrl);
-        }}
       />
     );
   }
