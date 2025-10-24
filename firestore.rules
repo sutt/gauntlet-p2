@@ -24,10 +24,11 @@ service cloud.firestore {
       // Users can update their own profile
       // MILESTONE 8: Allow updating lastSeen and online fields for presence tracking
       // MILESTONE 9: Allow updating displayName if needed
+      // V1: Allow updating profile image fields
       allow update: if isSignedIn()
                     && request.auth.uid == userId
                     && request.resource.data.diff(resource.data).affectedKeys()
-                       .hasOnly(['lastSeen', 'online', 'displayName', 'pushTokens']);
+                       .hasOnly(['lastSeen', 'online', 'displayName', 'pushTokens', 'profileImageUrl', 'profileImagePath', 'profileImageUpdatedAt']);
 
       allow delete: if false; // No deletion for MVP
     }

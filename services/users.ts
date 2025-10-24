@@ -70,6 +70,10 @@ export const getUser = async (userId: string): Promise<User | null> => {
       lastSeen: data.lastSeen?.toDate() || new Date(),
       online: data.online || false,
       pushTokens: data.pushTokens,
+      // V1: Profile image fields
+      profileImageUrl: data.profileImageUrl,
+      profileImagePath: data.profileImagePath,
+      profileImageUpdatedAt: data.profileImageUpdatedAt?.toDate(),
     };
   } catch (error) {
     console.error('Error fetching user:', error);
@@ -128,6 +132,10 @@ export const findUserByEmail = async (email: string): Promise<User | null> => {
       lastSeen: data.lastSeen?.toDate() || new Date(),
       online: data.online || false,
       pushTokens: data.pushTokens,
+      // V1: Profile image fields
+      profileImageUrl: data.profileImageUrl,
+      profileImagePath: data.profileImagePath,
+      profileImageUpdatedAt: data.profileImageUpdatedAt?.toDate(),
     };
   } catch (error) {
     console.error('Error finding user by email:', error);
@@ -155,17 +163,25 @@ export const updateLastSeen = async (userId: string): Promise<void> => {
 
 /**
  * Update user profile fields
+ * V1: Now supports profile image fields
  *
  * @param userId - Firebase Auth UID
  * @param updates - Partial user data to update
  */
 export const updateUserProfile = async (
   userId: string,
-  updates: Partial<Pick<User, 'displayName' | 'pushTokens'>>
+  updates: Partial<Pick<User, 'displayName' | 'pushTokens' | 'profileImageUrl' | 'profileImagePath'>>
 ): Promise<void> => {
   try {
     const userRef = doc(db, USERS_COLLECTION, userId);
-    await updateDoc(userRef, updates);
+    const updateData: any = { ...updates };
+
+    // V1: Add profileImageUpdatedAt if updating profile image
+    if (updates.profileImageUrl) {
+      updateData.profileImageUpdatedAt = Timestamp.now();
+    }
+
+    await updateDoc(userRef, updateData);
   } catch (error) {
     console.error('Error updating user profile:', error);
     throw error;

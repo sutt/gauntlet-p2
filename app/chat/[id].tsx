@@ -30,6 +30,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import TranslationModal from '@/components/TranslationModal';
 import { Image } from 'expo-image';
+import { Avatar } from '@/components/Avatar';
 
 // Type for items in the FlatList (can be message or date divider)
 type ChatListItem =
@@ -627,6 +628,17 @@ export default function ChatScreen() {
         >
           <Ionicons name="chevron-back" size={28} color={tintColor} />
         </TouchableOpacity>
+
+        {/* V1: Profile avatar */}
+        {!isGroupChat && otherUser && (
+          <Avatar
+            userId={otherUser.id}
+            displayName={otherUser.displayName}
+            profileImageUrl={otherUser.profileImageUrl}
+            size={36}
+            style={{ marginRight: 12 }}
+          />
+        )}
 
         <View style={styles.headerContent}>
           <ThemedText type="defaultSemiBold" style={styles.headerTitle}>

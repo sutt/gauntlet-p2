@@ -227,3 +227,179 @@ export const formatFileSize = (bytes: number): string => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
+
+/**
+ * V1: Crop image to square and resize for profile picture
+ * Target: 500x500px square, ~50-100KB
+ */
+export const cropToSquareProfile = async (uri: string): Promise<ImageManipulator.ImageResult> => {
+  try {
+    // First, get the original image info
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [],
+      { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+    );
+
+    const { width, height } = result;
+
+    // Calculate crop dimensions to make it square
+    const cropSize = Math.min(width, height);
+    const cropX = (width - cropSize) / 2;
+    const cropY = (height - cropSize) / 2;
+
+    // Crop to square, then resize to 500x500
+    const manipulations: ImageManipulator.Action[] = [
+      {
+        crop: {
+          originX: cropX,
+          originY: cropY,
+          width: cropSize,
+          height: cropSize,
+        },
+      },
+      {
+        resize: {
+          width: 500,
+          height: 500,
+        },
+      },
+    ];
+
+    const cropped = await ImageManipulator.manipulateAsync(
+      uri,
+      manipulations,
+      {
+        compress: 0.8,
+        format: ImageManipulator.SaveFormat.JPEG,
+      }
+    );
+
+    return cropped;
+  } catch (error) {
+    console.error('Error cropping image to square:', error);
+    throw new Error('Failed to crop image');
+  }
+};
+
+/**
+ * V1: Upload profile image to Firebase Storage
+ * Overwrites existing profile image if present
+ */
+export const uploadProfileImage = async (
+  uri: string,
+  userId: string,
+  onProgress?: (progress: ImageUploadProgress) => void
+): Promise<ImageUploadResult> => {
+  try {
+    // Crop and resize to square 500x500
+    console.log('Cropping profile image to square...');
+    const cropped = await cropToSquareProfile(uri);
+
+    // Convert to blob
+    const response = await fetch(cropped.uri);
+    const blob = await response.blob();
+
+    // Fixed filename for profile (will overwrite existing)
+    const storagePath = `users/${userId}/profile.jpg`;
+
+    // Create storage reference
+    const storage = getStorage();
+    const storageRef = ref(storage, storagePath);
+
+    // Upload with progress tracking
+    const uploadTask = uploadBytesResumable(storageRef, blob, {
+      contentType: 'image/jpeg',
+    });
+
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = snapshot.bytesTransferred / snapshot.totalBytes;
+          if (onProgress) {
+            onProgress({
+              bytesTransferred: snapshot.bytesTransferred,
+              totalBytes: snapshot.totalBytes,
+              progress,
+            });
+          }
+          console.log(`Profile upload progress: ${(progress * 100).toFixed(0)}%`);
+        },
+        (error) => {
+          console.error('Profile upload error:', error);
+          reject(new Error('Failed to upload profile image'));
+        },
+        async () => {
+          // Upload complete, get download URL
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log('✅ Profile image uploaded successfully!');
+            console.log('📍 Storage path:', storagePath);
+            console.log('🔗 Download URL:', downloadURL);
+            console.log('📦 File size:', blob.size, 'bytes');
+
+            resolve({
+              url: downloadURL,
+              path: storagePath,
+              width: 500,
+              height: 500,
+              fileSize: blob.size,
+              mimeType: 'image/jpeg',
+            });
+          } catch (error) {
+            console.error('Error getting download URL:', error);
+            reject(new Error('Failed to get profile image URL'));
+          }
+        }
+      );
+    });
+  } catch (error: any) {
+    console.error('Error uploading profile image:', error);
+    throw new Error(error.message || 'Failed to upload profile image');
+  }
+};
+
+/**
+ * V1: Generate initials from display name
+ * Used for default avatar
+ */
+export const getInitials = (name: string): string => {
+  if (!name) return '?';
+
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    // First and last name
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  // Single name - take first two characters
+  return name.substring(0, 2).toUpperCase();
+};
+
+/**
+ * V1: Generate consistent color from userId for default avatar
+ * Uses hash to pick from predefined color palette
+ */
+export const getAvatarColor = (userId: string): string => {
+  const colors = [
+    '#FF6B6B', // Red
+    '#4ECDC4', // Teal
+    '#45B7D1', // Blue
+    '#FFA07A', // Salmon
+    '#98D8C8', // Mint
+    '#F7DC6F', // Yellow
+    '#BB8FCE', // Purple
+    '#85C1E2', // Sky blue
+    '#F8B739', // Orange
+    '#52B788', // Green
+  ];
+
+  // Simple hash function
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+};

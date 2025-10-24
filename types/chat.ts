@@ -58,4 +58,8 @@ export interface User {
   lastSeen?: Date;
   online?: boolean; // Computed client-side: lastSeen < 2 minutes ago
   pushTokens?: string[]; // For future push notifications
+  // V1: Profile image support
+  profileImageUrl?: string; // Firebase Storage download URL
+  profileImagePath?: string; // Storage path (for deletion/update)
+  profileImageUpdatedAt?: Date;
 }

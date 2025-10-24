@@ -24,6 +24,7 @@ import {
 import { getUsers } from '@/services/users';
 import { formatRelativeTime } from '@/utils/date-format';
 import { isUserOnline } from '@/services/presence';
+import { Avatar } from '@/components/Avatar';
 
 export default function ChatsScreen() {
   const { user } = useAuth();
@@ -291,17 +292,24 @@ export default function ChatsScreen() {
       });
     }
 
+    // V1: Get other user info for avatar (for 1-on-1 chats)
+    const otherUser = item.type !== 'group' && otherParticipants.length === 1
+      ? userCache[otherParticipants[0]]
+      : null;
+
     return (
       <TouchableOpacity
         style={[styles.conversationItem, { borderBottomColor: borderColor }]}
         onPress={() => handleConversationPress(item.id)}
       >
         <View style={styles.avatarContainer}>
-          <View style={styles.avatarPlaceholder}>
-            <ThemedText style={styles.avatarText}>
-              {displayText[0]?.toUpperCase() || '?'}
-            </ThemedText>
-          </View>
+          {/* V1: Use Avatar component with profile image support */}
+          <Avatar
+            userId={otherUser?.id || item.participants[0] || 'group'}
+            displayName={displayText}
+            profileImageUrl={otherUser?.profileImageUrl}
+            size={50}
+          />
           {/* Milestone 8: Online indicator */}
           {isOnline && (
             <View style={styles.onlineIndicator} />
