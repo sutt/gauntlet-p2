@@ -369,7 +369,8 @@ export default function ChatsScreen() {
         data={conversations}
         renderItem={renderConversationItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={conversations.length === 0 ? styles.emptyContainer : undefined}
+        style={styles.flatList}
+        contentContainerStyle={conversations.length === 0 ? styles.emptyContainer : styles.listContainer}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -583,6 +584,8 @@ export default function ChatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   centerContent: {
     justifyContent: 'center',
@@ -592,10 +595,15 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   header: {
+    width: '100%',
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
     borderBottomWidth: 1,
+  },
+  flatList: {
+    width: '100%',
+    flex: 1,
   },
   conversationItem: {
     flexDirection: 'row',
@@ -668,6 +676,10 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     flex: 1,
+  },
+  listContainer: {
+    flexGrow: 1,
+    width: '100%',
   },
   emptyState: {
     flex: 1,
