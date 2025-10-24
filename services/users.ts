@@ -162,6 +162,44 @@ export const updateLastSeen = async (userId: string): Promise<void> => {
 };
 
 /**
+ * Get all users
+ * V1: Used for People tab to show all registered users
+ *
+ * @returns Array of all User documents
+ */
+export const getAllUsers = async (): Promise<User[]> => {
+  try {
+    const q = query(
+      collection(db, USERS_COLLECTION),
+      where('displayName', '!=', null) // Only users with display names
+    );
+
+    const snapshot = await getDocs(q);
+
+    const users: User[] = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        email: data.email,
+        displayName: data.displayName,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        lastSeen: data.lastSeen?.toDate() || new Date(),
+        online: data.online || false,
+        pushTokens: data.pushTokens,
+        profileImageUrl: data.profileImageUrl,
+        profileImagePath: data.profileImagePath,
+        profileImageUpdatedAt: data.profileImageUpdatedAt?.toDate(),
+      };
+    });
+
+    return users;
+  } catch (error) {
+    console.error('Error fetching all users:', error);
+    return [];
+  }
+};
+
+/**
  * Update user profile fields
  * V1: Now supports profile image fields
  *

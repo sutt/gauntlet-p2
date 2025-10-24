@@ -176,6 +176,32 @@ export const findDirectConversation = async (
 };
 
 /**
+ * Get or create a direct conversation between two users
+ * V1: Used in People tab to start a chat
+ * Returns the conversation ID of the existing or newly created conversation
+ */
+export const getOrCreateDirectConversation = async (
+  user1Id: string,
+  user2Id: string
+): Promise<string> => {
+  try {
+    // First, try to find an existing conversation
+    const existingConversation = await findDirectConversation(user1Id, user2Id);
+
+    if (existingConversation) {
+      return existingConversation.id;
+    }
+
+    // If no existing conversation, create a new one
+    const conversationId = await createConversation([user1Id, user2Id], user1Id, 'direct');
+    return conversationId;
+  } catch (error) {
+    console.error('Error getting or creating direct conversation:', error);
+    throw error;
+  }
+};
+
+/**
  * Subscribe to user's conversations (real-time updates)
  * MANUAL: Ensure Firestore security rules allow authenticated users to read their conversations
  * Users can only read conversations where they are in the participants array
