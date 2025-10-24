@@ -51,34 +51,55 @@ const convertDocToMessage = (doc: any): Message => {
   const data = doc.data();
   return {
     id: doc.id,
-    text: data.text,
+    text: data.text || '',
     senderId: data.senderId,
     senderName: data.senderName || 'Unknown',
     timestamp: timestampToDate(data.timestamp),
     conversationId: data.conversationId,
     // Milestone 9: Read receipts
     readBy: convertReadBy(data.readBy),
+    // V1: Image support
+    mediaType: data.mediaType,
+    mediaUrl: data.mediaUrl,
+    mediaPath: data.mediaPath,
+    mediaMetadata: data.mediaMetadata,
   };
 };
 
 /**
+ * V1: Message data interface (supports both text and image messages)
+ */
+export interface SendMessageData {
+  text?: string; // Optional when image is present
+  mediaUrl?: string;
+  mediaPath?: string;
+  mediaMetadata?: {
+    width: number;
+    height: number;
+    fileSize: number;
+    mimeType: string;
+  };
+}
+
+/**
  * Send a message to a conversation
+ * V1: Now supports both text and image messages
  * MANUAL: Ensure Firestore security rules allow authenticated users to write to conversations/{conversationId}/messages
  */
 export const sendMessage = async (
   conversationId: string,
-  text: string,
+  messageData: SendMessageData,
   userId: string,
   userName: string = 'Unknown'
 ): Promise<string> => {
   try {
     const messagesRef = collection(db, 'conversations', conversationId, 'messages');
 
-    const messageData = {
+    const firestoreMessageData: any = {
       conversationId,
       senderId: userId,
       senderName: userName,
-      text,
+      text: messageData.text || '',
       timestamp: Timestamp.now(),
       // Milestone 9: Mark as read by sender immediately
       readBy: {
@@ -86,11 +107,19 @@ export const sendMessage = async (
       },
     };
 
+    // V1: Add image data if present
+    if (messageData.mediaUrl) {
+      firestoreMessageData.mediaType = 'image';
+      firestoreMessageData.mediaUrl = messageData.mediaUrl;
+      firestoreMessageData.mediaPath = messageData.mediaPath;
+      firestoreMessageData.mediaMetadata = messageData.mediaMetadata;
+    }
+
     const batch = writeBatch(db);
 
     // Add message
     const messageRef = doc(messagesRef);
-    batch.set(messageRef, messageData);
+    batch.set(messageRef, firestoreMessageData);
 
     // Milestone 5: Update conversation metadata for last message preview
     // Milestone 11: Increment unread count for all participants except sender
@@ -110,9 +139,17 @@ export const sendMessage = async (
 
     console.log(`📨 Sending message - Participants:`, participants, `Unread updates:`, Object.keys(unreadUpdates));
 
+    // Determine last message preview
+    let lastMessagePreview: string;
+    if (messageData.mediaUrl) {
+      lastMessagePreview = messageData.text ? `📷 ${messageData.text}` : '📷 Photo';
+    } else {
+      lastMessagePreview = (messageData.text || '').substring(0, 100);
+    }
+
     // Use update() instead of set() to properly handle nested field paths
     batch.update(convRef, {
-      lastMessage: text.substring(0, 100),
+      lastMessage: lastMessagePreview,
       lastMessageTime: Timestamp.now(),
       lastMessageSenderId: userId,
       ...unreadUpdates,

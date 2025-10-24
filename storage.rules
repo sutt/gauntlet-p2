@@ -1,0 +1,63 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules
+// V1: Image support for chat conversations
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user is participant in a conversation
+    function isConversationParticipant(conversationId) {
+      return isSignedIn() &&
+             request.auth.uid in firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data.participants;
+    }
+
+    // Helper function to validate image file
+    function isValidImage() {
+      return request.resource.size < 10 * 1024 * 1024 // Max 10MB
+          && request.resource.contentType.matches('image/.*'); // Must be an image
+    }
+
+    // Conversation images
+    // Path: conversations/{conversationId}/images/{imageId}
+    match /conversations/{conversationId}/images/{imageId} {
+      // Allow read if user is a participant in the conversation
+      allow read: if isConversationParticipant(conversationId);
+
+      // Allow write (upload) if:
+      // 1. User is authenticated
+      // 2. User is a participant in the conversation
+      // 3. File is a valid image (under 10MB, image type)
+      allow write: if isConversationParticipant(conversationId)
+                   && isValidImage();
+
+      // Allow delete if user is a participant (for future feature)
+      allow delete: if isConversationParticipant(conversationId);
+    }
+
+    // User profile images
+    // Path: users/{userId}/profile.jpg
+    match /users/{userId}/profile.jpg {
+      // Allow anyone authenticated to read profile images
+      allow read: if isSignedIn();
+
+      // Allow user to write/update their own profile image
+      allow write: if isSignedIn()
+                   && request.auth.uid == userId
+                   && isValidImage();
+
+      // Allow user to delete their own profile image
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Deny all other paths by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

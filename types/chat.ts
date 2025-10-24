@@ -6,7 +6,7 @@ export type MessageStatus = 'sending' | 'sent' | 'failed';
 
 export interface Message {
   id: string;
-  text: string;
+  text: string; // Optional when image is present (can be caption)
   senderId: string;
   senderName: string; // Will add in Milestone 3
   timestamp: Date;
@@ -18,6 +18,17 @@ export interface Message {
   // Milestone 7: Optimistic UI fields (client-only, not stored in Firestore)
   status?: MessageStatus; // 'sending' | 'sent' | 'failed'
   tempId?: string; // Temporary ID for pending messages
+
+  // V1: Image support
+  mediaType?: 'image'; // For future expansion: 'video' | 'file'
+  mediaUrl?: string; // Firebase Storage download URL
+  mediaPath?: string; // Storage path (for reference)
+  mediaMetadata?: {
+    width: number;
+    height: number;
+    fileSize: number;
+    mimeType: string;
+  };
 }
 
 // Milestone 10: Conversation types

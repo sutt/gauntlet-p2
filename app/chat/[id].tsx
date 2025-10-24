@@ -2,12 +2,13 @@ import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/auth';
 import { useNotifications } from '@/context/notifications';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { sendMessage, subscribeToMessages, markMessagesAsRead, loadMoreMessages } from '@/services/messages';
+import { sendMessage, subscribeToMessages, markMessagesAsRead, loadMoreMessages, SendMessageData } from '@/services/messages';
 import { getUser } from '@/services/users';
 import { getConversation } from '@/services/conversations';
 import { Message, User } from '@/types/chat';
 import { formatMessageTime, getDateDividerText } from '@/utils/date-format';
 import { formatLastSeen, isUserOnline } from '@/services/presence';
+import { pickImage, uploadImageToStorage, ImageUploadProgress } from '@/utils/image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
@@ -21,11 +22,14 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import TranslationModal from '@/components/TranslationModal';
+import { Image } from 'expo-image';
 
 // Type for items in the FlatList (can be message or date divider)
 type ChatListItem =
@@ -63,6 +67,11 @@ export default function ChatScreen() {
     visible: false,
     messageText: '',
   });
+  // V1: Image handling state
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -253,7 +262,8 @@ export default function ChatScreen() {
 
     try {
       const userName = displayName || user.email?.split('@')[0] || 'Unknown';
-      await sendMessage(id, failedMessage.text, user.uid, userName);
+      // V1: Use new SendMessageData interface
+      await sendMessage(id, { text: failedMessage.text }, user.uid, userName);
 
       // Remove from pending messages on success
       setPendingMessages((prev) => prev.filter((m) => m.tempId !== tempId));
@@ -329,11 +339,32 @@ export default function ChatScreen() {
     });
   }, []);
 
+  // V1: Handler for picking and uploading images
+  const handlePickImage = async () => {
+    try {
+      const asset = await pickImage();
+      if (!asset) return;
+
+      setSelectedImage(asset.uri);
+    } catch (error: any) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', error.message || 'Failed to pick image');
+    }
+  };
+
+  // V1: Handler for removing selected image
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+  };
+
   const handleSend = async () => {
-    if (!inputText.trim() || !user || !id) return;
+    // V1: Allow sending if either text or image is present
+    if ((!inputText.trim() && !selectedImage) || !user || !id) return;
 
     const messageText = inputText;
+    const imageUri = selectedImage;
     setInputText(''); // Clear input immediately for better UX
+    setSelectedImage(null); // Clear selected image
 
     // Milestone 7: Generate temporary ID for optimistic message
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -356,7 +387,47 @@ export default function ChatScreen() {
     setSending(true);
 
     try {
-      await sendMessage(id, messageText, user.uid, userName);
+      // V1: Build message data
+      const messageData: SendMessageData = {
+        text: messageText || undefined,
+      };
+
+      // V1: Upload image if present
+      if (imageUri) {
+        setUploadingImage(true);
+        try {
+          const uploadResult = await uploadImageToStorage(
+            imageUri,
+            id,
+            (progress: ImageUploadProgress) => {
+              setUploadProgress(progress.progress);
+            }
+          );
+
+          messageData.mediaUrl = uploadResult.url;
+          messageData.mediaPath = uploadResult.path;
+          messageData.mediaMetadata = {
+            width: uploadResult.width,
+            height: uploadResult.height,
+            fileSize: uploadResult.fileSize,
+            mimeType: uploadResult.mimeType,
+          };
+
+          console.log('✅ Image uploaded successfully:', uploadResult.url);
+        } catch (uploadError: any) {
+          console.error('Error uploading image:', uploadError);
+          Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+          // Remove pending message
+          setPendingMessages((prev) => prev.filter((m) => m.tempId !== tempId));
+          return;
+        } finally {
+          setUploadingImage(false);
+          setUploadProgress(0);
+        }
+      }
+
+      // Send message with text and/or image
+      await sendMessage(id, messageData, user.uid, userName);
 
       // Milestone 7: Remove from pending messages on success (will appear in server messages)
       setPendingMessages((prev) => prev.filter((m) => m.tempId !== tempId));
@@ -425,16 +496,46 @@ export default function ChatScreen() {
             // Milestone 7: Visual feedback for sending/failed messages
             message.status === 'sending' && { opacity: 0.6 },
             message.status === 'failed' && { backgroundColor: '#FF3B30' },
+            // V1: Adjust padding for images
+            message.mediaUrl && { padding: 4 },
           ]}
         >
-          <ThemedText
-            style={[
-              styles.messageText,
-              isOwnMessage ? { color: '#fff' } : { color: '#000' },
-            ]}
-          >
-            {message.text}
-          </ThemedText>
+          {/* V1: Display image if present */}
+          {message.mediaUrl && (
+            <TouchableOpacity
+              onPress={() => setFullScreenImage(message.mediaUrl!)}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={{ uri: message.mediaUrl }}
+                style={[
+                  styles.messageImage,
+                  {
+                    aspectRatio:
+                      message.mediaMetadata?.width && message.mediaMetadata?.height
+                        ? message.mediaMetadata.width / message.mediaMetadata.height
+                        : 1,
+                  },
+                ]}
+                contentFit="cover"
+                transition={300}
+                cachePolicy="memory-disk"
+              />
+            </TouchableOpacity>
+          )}
+          {/* Display text if present (can be caption for image) */}
+          {message.text && (
+            <ThemedText
+              style={[
+                styles.messageText,
+                isOwnMessage ? { color: '#fff' } : { color: '#000' },
+                // V1: Add top margin if image is also present
+                message.mediaUrl && { marginTop: 8, padding: 8 },
+              ]}
+            >
+              {message.text}
+            </ThemedText>
+          )}
           <View style={styles.messageFooter}>
             <ThemedText
               style={[
@@ -604,30 +705,73 @@ export default function ChatScreen() {
           },
         ]}
       >
-        <TextInput
-          style={[styles.input, { borderColor, color: textColor }]}
-          placeholder="Type a message..."
-          placeholderTextColor="#999"
-          value={inputText}
-          onChangeText={setInputText}
-          multiline
-          maxLength={5000}
-          editable={!sending}
-        />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            { backgroundColor: inputText.trim() && !sending ? tintColor : '#ccc' },
-          ]}
-          onPress={handleSend}
-          disabled={!inputText.trim() || sending}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <ThemedText style={styles.sendButtonText}>Send</ThemedText>
-          )}
-        </TouchableOpacity>
+        {/* V1: Image preview */}
+        {selectedImage && (
+          <View style={styles.imagePreviewContainer}>
+            <Image
+              source={{ uri: selectedImage }}
+              style={styles.imagePreview}
+              contentFit="cover"
+            />
+            <TouchableOpacity
+              style={styles.removeImageButton}
+              onPress={handleRemoveImage}
+            >
+              <Ionicons name="close-circle" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* V1: Upload progress indicator */}
+        {uploadingImage && (
+          <View style={styles.uploadProgressContainer}>
+            <ActivityIndicator size="small" color={tintColor} />
+            <ThemedText style={styles.uploadProgressText}>
+              Uploading... {(uploadProgress * 100).toFixed(0)}%
+            </ThemedText>
+          </View>
+        )}
+
+        <View style={styles.inputRow}>
+          {/* V1: Image picker button */}
+          <TouchableOpacity
+            style={styles.imagePickerButton}
+            onPress={handlePickImage}
+            disabled={sending || uploadingImage}
+          >
+            <Ionicons name="image-outline" size={24} color={tintColor} />
+          </TouchableOpacity>
+
+          <TextInput
+            style={[styles.input, { borderColor, color: textColor }]}
+            placeholder="Type a message..."
+            placeholderTextColor="#999"
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+            maxLength={5000}
+            editable={!sending && !uploadingImage}
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor:
+                  (inputText.trim() || selectedImage) && !sending && !uploadingImage
+                    ? tintColor
+                    : '#ccc',
+              },
+            ]}
+            onPress={handleSend}
+            disabled={(!inputText.trim() && !selectedImage) || sending || uploadingImage}
+          >
+            {sending || uploadingImage ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <ThemedText style={styles.sendButtonText}>Send</ThemedText>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Translation Modal */}
@@ -638,6 +782,30 @@ export default function ChatScreen() {
         conversationId={id}
         defaultTargetLanguage="Spanish"
       />
+
+      {/* V1: Full-screen image viewer */}
+      <Modal
+        visible={!!fullScreenImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullScreenImage(null)}
+      >
+        <View style={styles.fullScreenImageContainer}>
+          <TouchableOpacity
+            style={styles.fullScreenCloseButton}
+            onPress={() => setFullScreenImage(null)}
+          >
+            <Ionicons name="close" size={32} color="#fff" />
+          </TouchableOpacity>
+          {fullScreenImage && (
+            <Image
+              source={{ uri: fullScreenImage }}
+              style={styles.fullScreenImage}
+              contentFit="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -759,11 +927,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   inputContainer: {
-    flexDirection: 'row',
     paddingHorizontal: 12,
     paddingTop: 12,
     borderTopWidth: 1,
+  },
+  inputRow: {
+    flexDirection: 'row',
     alignItems: 'flex-end',
+  },
+  imagePickerButton: {
+    padding: 8,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   input: {
     flex: 1,
@@ -785,6 +961,59 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  // V1: Image preview styles
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  imagePreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 12,
+  },
+  uploadProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  uploadProgressText: {
+    marginLeft: 8,
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  // V1: Message image styles
+  messageImage: {
+    width: 200,
+    maxHeight: 300,
+    borderRadius: 12,
+  },
+  // V1: Full-screen image viewer styles
+  fullScreenImageContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+  },
+  fullScreenCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    padding: 8,
   },
   dateDividerContainer: {
     flexDirection: 'row',
