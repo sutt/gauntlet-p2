@@ -9,6 +9,7 @@ import { Message, User } from '@/types/chat';
 import { formatMessageTime, getDateDividerText } from '@/utils/date-format';
 import { formatLastSeen, isUserOnline } from '@/services/presence';
 import { pickImage, uploadImageToStorage, ImageUploadProgress } from '@/utils/image';
+import { setTypingState, subscribeToTypingState, clearTypingState, TypingUser } from '@/services/typing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
@@ -73,6 +74,10 @@ export default function ChatScreen() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  // V1: Typing indicator state
+  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
+  const [isCurrentUserTyping, setIsCurrentUserTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -81,18 +86,37 @@ export default function ChatScreen() {
 
   // Milestone 14: Notify NotificationsProvider when entering/exiting this conversation
   // This prevents notifications from being shown for messages in the current conversation
+  // V1: Also clear typing state when leaving
   useEffect(() => {
     if (!id) return;
 
     console.log('🔔 ChatScreen: Setting current conversation to:', id);
     setCurrentConversation(id);
 
-    // Clear current conversation when leaving this screen
+    // Clear current conversation and typing state when leaving this screen
     return () => {
       console.log('🔔 ChatScreen: Clearing current conversation');
       setCurrentConversation(null);
+
+      // V1: Clear typing state when leaving
+      if (user?.uid) {
+        clearTypingState(id, user.uid);
+      }
     };
-  }, [id, setCurrentConversation]);
+  }, [id, setCurrentConversation, user]);
+
+  // V1: Subscribe to typing state changes
+  useEffect(() => {
+    if (!id || !user) return;
+
+    const unsubscribe = subscribeToTypingState(id, (users) => {
+      // Filter out current user's typing state
+      const othersTyping = users.filter((u) => u.userId !== user.uid);
+      setTypingUsers(othersTyping);
+    });
+
+    return unsubscribe;
+  }, [id, user]);
 
   // Fetch current user's display name
   useEffect(() => {
@@ -279,6 +303,33 @@ export default function ChatScreen() {
     }
   };
 
+  // V1: Get typing indicator text based on who is typing
+  const getTypingIndicatorText = useMemo(() => {
+    if (typingUsers.length === 0) return null;
+
+    // Map user IDs to names (if we have them loaded)
+    const typingNames: string[] = [];
+
+    typingUsers.forEach((typingUser) => {
+      if (typingUser.userId === otherUser?.id && otherUser) {
+        typingNames.push(otherUser.displayName);
+      }
+    });
+
+    if (typingNames.length === 0) {
+      // Fallback if we don't have names loaded yet
+      return '...';
+    }
+
+    if (typingNames.length === 1) {
+      return `${typingNames[0]} is typing...`;
+    } else if (typingNames.length === 2) {
+      return `${typingNames[0]} and ${typingNames[1]} are typing...`;
+    } else {
+      return `${typingNames.length} people are typing...`;
+    }
+  }, [typingUsers, otherUser]);
+
   // Milestone 9: Helper function to get read receipt status
   const getReadReceiptStatus = useCallback((message: Message): 'sent' | 'read' | null => {
     // Only show for own messages
@@ -358,6 +409,32 @@ export default function ChatScreen() {
     setSelectedImage(null);
   };
 
+  // V1: Handle text input change with typing indicator
+  const handleTextChange = (text: string) => {
+    setInputText(text);
+
+    if (!id || !user) return;
+
+    // Start typing indicator if text is not empty
+    if (text.trim().length > 0 && !isCurrentUserTyping) {
+      setTypingState(id, user.uid, true);
+      setIsCurrentUserTyping(true);
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new timeout to stop typing after 2 seconds of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isCurrentUserTyping) {
+        setTypingState(id, user.uid, false);
+        setIsCurrentUserTyping(false);
+      }
+    }, 2000);
+  };
+
   const handleSend = async () => {
     // V1: Allow sending if either text or image is present
     if ((!inputText.trim() && !selectedImage) || !user || !id) return;
@@ -366,6 +443,15 @@ export default function ChatScreen() {
     const imageUri = selectedImage;
     setInputText(''); // Clear input immediately for better UX
     setSelectedImage(null); // Clear selected image
+
+    // V1: Clear typing state when sending
+    if (isCurrentUserTyping) {
+      setTypingState(id, user.uid, false);
+      setIsCurrentUserTyping(false);
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
 
     // Milestone 7: Generate temporary ID for optimistic message
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -658,6 +744,15 @@ export default function ChatScreen() {
         </View>
       </View>
 
+      {/* V1: Typing Indicator */}
+      {getTypingIndicatorText && (
+        <View style={[styles.typingIndicatorContainer, { borderBottomColor: borderColor }]}>
+          <ThemedText style={styles.typingIndicatorText}>
+            {getTypingIndicatorText}
+          </ThemedText>
+        </View>
+      )}
+
       <FlatList
         ref={flatListRef}
         data={chatListItems}
@@ -759,7 +854,7 @@ export default function ChatScreen() {
             placeholder="Type a message..."
             placeholderTextColor="#999"
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleTextChange}
             multiline
             maxLength={5000}
             editable={!sending && !uploadingImage}
@@ -865,6 +960,17 @@ const styles = StyleSheet.create({
   },
   headerStatusText: {
     fontSize: 12,
+    opacity: 0.7,
+  },
+  // V1: Typing indicator styles
+  typingIndicatorContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  typingIndicatorText: {
+    fontSize: 13,
+    fontStyle: 'italic',
     opacity: 0.7,
   },
   messagesList: {
