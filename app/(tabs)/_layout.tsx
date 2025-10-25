@@ -71,6 +71,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="signatures"
+        options={{
+          title: 'Signatures',
+          tabBarIcon: ({ color }) => <Ionicons name="create-outline" size={28} color={color} />,
+        }}
+      />
       {__DEV__ && (
         <Tabs.Screen
           name="ai-test"
