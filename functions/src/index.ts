@@ -480,21 +480,28 @@ export const signMessages = onCall(
       // 8. Create signature document
       const signatureId = db.collection('_').doc().id;
 
+      // Build signature document data - only include purpose if it exists
+      const signatureDocData: any = {
+        signatureId,
+        signedPayload: payload,
+        pgpSignature: signature,
+        createdAt: new Date(),
+        conversationId,
+        messageIds: payload.messages.map((m: any) => m.messageId),
+        verified: false, // Will be set by AI agent verification (future)
+      };
+
+      // Only add purpose if it exists in the payload
+      if (payload.purpose) {
+        signatureDocData.purpose = payload.purpose;
+      }
+
       await db
         .collection('users')
         .doc(userId)
         .collection('signatures')
         .doc(signatureId)
-        .set({
-          signatureId,
-          signedPayload: payload,
-          pgpSignature: signature,
-          createdAt: new Date(),
-          conversationId,
-          messageIds: payload.messages.map((m: any) => m.messageId),
-          purpose: payload.purpose || undefined,
-          verified: false, // Will be set by AI agent verification (future)
-        });
+        .set(signatureDocData);
 
       console.log('[SIGN] Signature document created:', signatureId);
 

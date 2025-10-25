@@ -54,7 +54,7 @@ export default function SignatureModal({
 
     try {
       // Build payload (client-provided, trusted for POC)
-      const payload = {
+      const payload: any = {
         version: '2.0',
         timestamp: 0, // Will be set by server
         signedAt: '', // Will be set by server
@@ -73,9 +73,15 @@ export default function SignatureModal({
           timestamp: m.timestamp instanceof Date ? m.timestamp.getTime() : m.timestamp,
           sentAt: new Date(m.timestamp).toISOString(),
         })),
-        purpose: purpose || undefined,
-        notes: notes || undefined,
       };
+
+      // Only add purpose and notes if they have values
+      if (purpose && purpose.trim()) {
+        payload.purpose = purpose.trim();
+      }
+      if (notes && notes.trim()) {
+        payload.notes = notes.trim();
+      }
 
       console.log('[SignatureModal] Calling signMessages Cloud Function...');
 
