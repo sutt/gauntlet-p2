@@ -75,52 +75,36 @@ export default function PeopleScreen() {
   }, [searchQuery, users]);
 
   const handleUserPress = (user: User) => {
-    console.log('[People] User pressed:', user.id, user.displayName);
     // Use setTimeout to prevent blocking the UI thread
     setTimeout(() => {
-      console.log('[People] Setting selected user...');
-      try {
-        setSelectedUser(user);
-        console.log('[People] Selected user set successfully');
-      } catch (error) {
-        console.error('[People] Error setting selected user:', error);
-      }
+      setSelectedUser(user);
     }, 0);
   };
 
   const handleCloseModal = () => {
-    console.log('[People] Closing modal');
     setSelectedUser(null);
     setCreatingChat(false); // Reset creating state
   };
 
   const handleStartChat = async () => {
-    if (!authUser || !selectedUser) {
-      console.warn('[People] handleStartChat called without authUser or selectedUser');
-      return;
-    }
-
-    console.log('[People] Starting chat with:', selectedUser.id);
+    if (!authUser || !selectedUser) return;
 
     try {
       setCreatingChat(true);
 
       // Create or get existing conversation
-      console.log('[People] Calling getOrCreateDirectConversation...');
       const conversationId = await getOrCreateDirectConversation(
         authUser.uid,
         selectedUser.id
       );
-      console.log('[People] Got conversation ID:', conversationId);
 
       // Close modal
       setSelectedUser(null);
 
       // Navigate to chat
-      console.log('[People] Navigating to chat:', conversationId);
       router.push(`/chat/${conversationId}`);
     } catch (error: any) {
-      console.error('[People] Error starting chat:', error);
+      console.error('Error starting chat:', error);
       Alert.alert('Error', error.message || 'Failed to start chat');
     } finally {
       setCreatingChat(false);
@@ -235,88 +219,58 @@ export default function PeopleScreen() {
           />
           <View style={[styles.modalContent, { backgroundColor }]}>
             {selectedUser ? (
-                <>
-                  {(() => {
-                    console.log('[People] Rendering modal content for:', selectedUser.id);
-                    return null;
-                  })()}
-                  {/* Close Button */}
-                  <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={handleCloseModal}
-                    disabled={creatingChat}
-                  >
-                    <Ionicons name="close" size={28} color={textColor} />
-                  </TouchableOpacity>
+              <>
+                {/* Close Button */}
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={handleCloseModal}
+                  disabled={creatingChat}
+                >
+                  <Ionicons name="close" size={28} color={textColor} />
+                </TouchableOpacity>
 
-                  {/* User Info */}
-                  <View style={styles.modalUserInfo}>
-                    {(() => {
-                      console.log('[People] Rendering Avatar for:', selectedUser.id, 'url:', selectedUser.profileImageUrl);
-                      return null;
-                    })()}
-                    {/* TEMPORARY: Avatar disabled for debugging */}
-                    <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#ccc' }} />
+                {/* User Info */}
+                <View style={styles.modalUserInfo}>
+                  <Avatar
+                    userId={selectedUser.id}
+                    displayName={selectedUser.displayName}
+                    profileImageUrl={selectedUser.profileImageUrl}
+                    size={100}
+                  />
 
-                    {(() => {
-                      console.log('[People] Rendering display name');
-                      return null;
-                    })()}
-                    <ThemedText type="title" style={styles.modalDisplayName}>
-                      {selectedUser.displayName}
-                    </ThemedText>
+                  <ThemedText type="title" style={styles.modalDisplayName}>
+                    {selectedUser.displayName}
+                  </ThemedText>
 
-                    {(() => {
-                      console.log('[People] Rendering email');
-                      return null;
-                    })()}
-                    <ThemedText style={[styles.modalEmail, { color: mutedColor }]}>
-                      {selectedUser.email}
-                    </ThemedText>
+                  <ThemedText style={[styles.modalEmail, { color: mutedColor }]}>
+                    {selectedUser.email}
+                  </ThemedText>
 
-                    {(() => {
-                      console.log('[People] Checking isUserOnline for:', selectedUser.id);
-                      const online = isUserOnline(selectedUser);
-                      console.log('[People] isUserOnline result:', online);
-                      return null;
-                    })()}
-                    {isUserOnline(selectedUser) && (
-                      <View style={styles.onlineStatus}>
-                        {(() => {
-                          console.log('[People] Rendering online status');
-                          return null;
-                        })()}
-                        <View style={styles.onlineStatusDot} />
-                        <ThemedText style={[styles.onlineStatusText, { color: tintColor }]}>
-                          Online
-                        </ThemedText>
-                      </View>
-                    )}
-                  </View>
+                  {isUserOnline(selectedUser) && (
+                    <View style={styles.onlineStatus}>
+                      <View style={styles.onlineStatusDot} />
+                      <ThemedText style={[styles.onlineStatusText, { color: tintColor }]}>
+                        Online
+                      </ThemedText>
+                    </View>
+                  )}
+                </View>
 
-                  {/* Actions */}
-                  {(() => {
-                    console.log('[People] Rendering message button, creatingChat:', creatingChat);
-                    return null;
-                  })()}
-                  <TouchableOpacity
-                    style={[styles.messageButton, { backgroundColor: tintColor }]}
-                    onPress={handleStartChat}
-                    disabled={creatingChat}
-                  >
-                    {(() => {
-                      console.log('[People] Rendering button content');
-                      return null;
-                    })()}
-                    {creatingChat ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <>
-                        <Ionicons name="chatbubble" size={20} color="#fff" />
-                        <ThemedText style={styles.messageButtonText}>Message</ThemedText>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                {/* Actions */}
+                <TouchableOpacity
+                  style={[styles.messageButton, { backgroundColor: tintColor }]}
+                  onPress={handleStartChat}
+                  disabled={creatingChat}
+                >
+                  {creatingChat ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="chatbubble" size={20} color="#fff" />
+                      <ThemedText style={styles.messageButtonText}>Message</ThemedText>
+                    </>
+                  )}
+                </TouchableOpacity>
               </>
             ) : null}
           </View>

@@ -24,30 +24,21 @@ export function Avatar({
   size = 40,
   style,
 }: AvatarProps) {
-  console.log('[Avatar] Rendering:', { userId, displayName, profileImageUrl, size });
-
   const initials = getInitials(displayName);
-  console.log('[Avatar] Got initials:', initials);
-
   const backgroundColor = getAvatarColor(userId);
-  console.log('[Avatar] Got backgroundColor:', backgroundColor);
-
   const [imageError, setImageError] = React.useState(false);
   const imageUrlRef = React.useRef(profileImageUrl);
 
   // Track URL changes with ref (no state updates, no re-renders)
   if (imageUrlRef.current !== profileImageUrl) {
-    console.log('[Avatar] URL changed from', imageUrlRef.current, 'to', profileImageUrl);
     imageUrlRef.current = profileImageUrl;
     // Reset error synchronously without triggering re-render
     if (imageError) {
-      console.log('[Avatar] Resetting error state synchronously');
       setImageError(false);
     }
   }
 
   if (profileImageUrl && !imageError) {
-    console.log('[Avatar] Rendering image version');
     // Show profile image with error fallback
     return (
       <Image
@@ -67,7 +58,6 @@ export function Avatar({
         placeholder={require('@/assets/images/partial-react-logo.png')}
         placeholderContentFit="cover"
         onError={() => {
-          console.warn('[Avatar] Failed to load image:', profileImageUrl);
           setImageError(true);
         }}
       />
@@ -75,7 +65,6 @@ export function Avatar({
   }
 
   // Show initials with colored background
-  console.log('[Avatar] Rendering initials version');
   return (
     <View
       style={[
