@@ -80,12 +80,17 @@ export function Avatar({
             StyleSheet.absoluteFill,
             {
               borderRadius: size / 2,
+              zIndex: 1,
             },
           ]}
           contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={200}
-          onError={() => {
+          cachePolicy="none"
+          transition={0}
+          onLoad={() => {
+            console.log('[Avatar] Image loaded successfully:', profileImageUrl);
+          }}
+          onError={(error) => {
+            console.log('[Avatar] Image error:', error, profileImageUrl);
             setImageError(true);
           }}
         />
