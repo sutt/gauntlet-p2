@@ -52,3 +52,7 @@ trees/
 firebase*.log
 firestore*log
 .firebase-emulator-data/
+database-debug.log
+
+# other
+.vscode
