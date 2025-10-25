@@ -8,6 +8,7 @@ import {
   getParticipantNames,
   getSenderName,
 } from './services/contextRetrieval';
+import * as openpgp from 'openpgp';
 
 // Initialize Firebase Admin SDK
 // Required because we use Firestore at module level (in this file and contextRetrieval.ts)
@@ -240,6 +241,120 @@ export const translateMessage = onCall(
       }
 
       throw new HttpsError('internal', `Translation error: ${error.message}`);
+    }
+  }
+);
+
+/**
+ * Generate PGP Keys for User (Digital Signatures v2)
+ *
+ * Generates ECC Curve25519 key pair for authenticated user on server-side.
+ * Keys are stored unencrypted in Firestore (POC trust-the-server model).
+ *
+ * Features:
+ * - Fast ECC Curve25519 generation (~200-500ms)
+ * - No passphrase required (POC limitation)
+ * - Keys stored in users/{uid} document
+ * - Returns public key and fingerprint
+ *
+ * Security (POC):
+ * - Private keys stored unencrypted in Firestore
+ * - Anyone with Firestore admin access can forge signatures
+ * - Documented limitation: production should use HSM or encryption
+ */
+export const generateKeysForUser = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 60,
+    invoker: 'public',
+    cors: [
+      'http://localhost:8081',
+      'http://localhost:19006',
+      /^https:\/\/.*\.vercel\.app$/,
+    ],
+  },
+  async (request) => {
+    const startTime = Date.now();
+
+    // Authentication check
+    const disableAuthCheck = process.env.DISABLE_AUTH_CHECK === 'true';
+    if (!disableAuthCheck && !request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be logged in to generate keys');
+    }
+
+    const userId = request.auth?.uid || 'shell-test-user';
+    const userEmail = request.auth?.token.email || 'test@example.com';
+
+    console.log('[KEYGEN] Generating keys for user:', userEmail);
+
+    try {
+      // Check if keys already exist
+      const userDoc = await db.collection('users').doc(userId).get();
+
+      if (userDoc.data()?.publicKey) {
+        throw new HttpsError(
+          'already-exists',
+          'Keys already generated for this user. Each user can only generate keys once.'
+        );
+      }
+
+      // Generate ECC Curve25519 key pair
+      console.log('[KEYGEN] Generating ECC Curve25519 key pair...');
+      const keygenStartTime = Date.now();
+
+      const { privateKey, publicKey } = await openpgp.generateKey({
+        type: 'ecc',
+        curve: 'curve25519',
+        userIDs: [{ email: userEmail }],
+        format: 'armored'
+        // No passphrase - keys stored unencrypted (POC limitation)
+      });
+
+      const keygenTime = Date.now() - keygenStartTime;
+      console.log('[KEYGEN] Key generation took:', keygenTime, 'ms');
+
+      // Get fingerprint
+      const publicKeyObj = await openpgp.readKey({ armoredKey: publicKey });
+      const fingerprint = publicKeyObj.getFingerprint();
+
+      console.log('[KEYGEN] Fingerprint:', fingerprint);
+
+      // Store in Firestore (unencrypted for POC)
+      const updateStartTime = Date.now();
+
+      await db.collection('users').doc(userId).update({
+        publicKey,
+        privateKey,  // Stored unencrypted - POC limitation
+        publicKeyFingerprint: fingerprint,
+        publicKeyCreatedAt: new Date(),
+        signatureKeysVersion: '2.0'
+      });
+
+      const updateTime = Date.now() - updateStartTime;
+      console.log('[KEYGEN] Firestore update took:', updateTime, 'ms');
+
+      const totalTime = Date.now() - startTime;
+      console.log('[KEYGEN] ✓ Keys stored successfully. Total time:', totalTime, 'ms');
+
+      return {
+        success: true,
+        publicKey,
+        fingerprint,
+        timings: {
+          keyGeneration: keygenTime,
+          firestoreUpdate: updateTime,
+          total: totalTime
+        }
+      };
+    } catch (error: any) {
+      console.error('[KEYGEN] Error generating keys:', error);
+
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      throw new HttpsError('internal', `Key generation error: ${error.message}`);
     }
   }
 );

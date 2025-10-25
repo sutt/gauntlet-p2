@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Avatar } from '@/components/Avatar';
-import { auth } from '@/config/firebase';
+import { auth, db } from '@/config/firebase';
 import { useAuth } from '@/context/auth';
 import { getUser, updateUserProfile } from '@/services/users';
 import { pickImage, uploadProfileImage, ImageUploadProgress } from '@/utils/image';
@@ -21,6 +21,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { User } from '@/types/chat';
+import { useRouter } from 'expo-router';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function ProfileScreen() {
   const { user: authUser } = useAuth();
@@ -31,7 +33,10 @@ export default function ProfileScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editedDisplayName, setEditedDisplayName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [hasSignatureKeys, setHasSignatureKeys] = useState(false);
+  const [signatureFingerprint, setSignatureFingerprint] = useState('');
 
+  const router = useRouter();
   const tintColor = useThemeColor({}, 'tint');
   const borderColor = useThemeColor({}, 'border');
   const backgroundColor = useThemeColor({}, 'background');
@@ -53,8 +58,44 @@ export default function ProfileScreen() {
     loadProfile();
   }, [authUser]);
 
+  // Check for signature keys
+  useEffect(() => {
+    if (!authUser) return;
+
+    const checkSignatureKeys = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', authUser.uid));
+        const data = userDoc.data();
+
+        if (data?.publicKey) {
+          setHasSignatureKeys(true);
+          setSignatureFingerprint(data.publicKeyFingerprint || '');
+        } else {
+          setHasSignatureKeys(false);
+          setSignatureFingerprint('');
+        }
+      } catch (error) {
+        console.error('Error checking signature keys:', error);
+      }
+    };
+
+    checkSignatureKeys();
+  }, [authUser]);
+
   const handleSignOut = async () => {
     await signOut(auth);
+  };
+
+  const handleDigitalSignatures = () => {
+    if (hasSignatureKeys) {
+      Alert.alert(
+        'Digital Signatures',
+        `Keys are already configured.\n\nFingerprint: ${signatureFingerprint.substring(0, 20)}...`,
+        [{ text: 'OK' }]
+      );
+    } else {
+      router.push('/settings/signature-setup');
+    }
   };
 
   const handleEditName = () => {
@@ -261,6 +302,22 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={[styles.actionButton, { borderColor }]}
+          onPress={handleDigitalSignatures}
+        >
+          <Ionicons name="shield-checkmark-outline" size={24} color={tintColor} />
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.actionButtonText}>Digital Signatures</ThemedText>
+            {hasSignatureKeys && (
+              <ThemedText style={styles.actionButtonSubtext}>✓ Keys configured</ThemedText>
+            )}
+          </View>
+          {!hasSignatureKeys && (
+            <Ionicons name="chevron-forward" size={20} color={tintColor} />
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, { borderColor }]}
           onPress={handleSignOut}
         >
           <Ionicons name="log-out-outline" size={24} color={tintColor} />
@@ -425,6 +482,11 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  actionButtonSubtext: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 2,
   },
   // Modal styles
   modalOverlay: {

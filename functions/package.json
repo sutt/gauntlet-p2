@@ -22,6 +22,7 @@
     "dotenv": "^16.4.7",
     "firebase-admin": "^13.0.2",
     "firebase-functions": "^6.2.0",
+    "openpgp": "^5.11.3",
     "zod": "^4.1.12"
   },
   "devDependencies": {
