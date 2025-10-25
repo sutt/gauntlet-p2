@@ -78,6 +78,10 @@ export default function ChatScreen() {
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [isCurrentUserTyping, setIsCurrentUserTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // V2: Signature selection state
+  const [longPressMode, setLongPressMode] = useState<'translate' | 'sign'>('translate');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -383,13 +387,85 @@ export default function ChatScreen() {
     }
   }, [id, lastMessageSnapshot, loadingMore, hasMoreMessages]);
 
-  // Handler for long-press on message to translate
-  const handleLongPressMessage = useCallback((message: Message) => {
-    setTranslationModal({
-      visible: true,
-      messageText: message.text,
-    });
+  // V2: Helper to check if selected messages are contiguous
+  const isContiguous = useCallback((selectedIds: string[], allMessages: Message[]): boolean => {
+    if (selectedIds.length <= 1) return true;
+
+    const indices = selectedIds
+      .map(id => allMessages.findIndex(m => m.id === id))
+      .sort((a, b) => a - b);
+
+    for (let i = 1; i < indices.length; i++) {
+      if (indices[i] !== indices[i - 1] + 1) {
+        return false;
+      }
+    }
+
+    return true;
   }, []);
+
+  // Handler for long-press on message (supports both translate and sign modes)
+  const handleLongPressMessage = useCallback((message: Message) => {
+    if (longPressMode === 'translate') {
+      // Translation mode: open translation modal
+      console.log('[Chat] Long press in translate mode, opening translation modal');
+      setTranslationModal({
+        visible: true,
+        messageText: message.text,
+      });
+    } else {
+      // Sign mode
+      if (selectionMode) {
+        // Already in selection mode, toggle selection
+        if (selectedMessageIds.includes(message.id)) {
+          // Deselect
+          console.log('[Chat] Deselecting message:', message.id);
+          setSelectedMessageIds(prev => prev.filter(id => id !== message.id));
+        } else {
+          // Check if contiguous
+          if (isContiguous([...selectedMessageIds, message.id], allMessages)) {
+            console.log('[Chat] Selecting message:', message.id);
+            setSelectedMessageIds(prev => [...prev, message.id]);
+          } else {
+            console.log('[Chat] Selection not contiguous, showing alert');
+            // Use Modal instead of Alert for web compatibility
+            Alert.alert('Invalid Selection', 'Please select continuous messages only');
+          }
+        }
+      } else {
+        // Start selection mode
+        console.log('[Chat] Starting selection mode with message:', message.id);
+        setSelectionMode(true);
+        setSelectedMessageIds([message.id]);
+      }
+    }
+  }, [longPressMode, selectionMode, selectedMessageIds, allMessages, isContiguous]);
+
+  // V2: Cancel selection mode
+  const handleCancelSelection = useCallback(() => {
+    console.log('[Chat] Canceling selection mode');
+    setSelectionMode(false);
+    setSelectedMessageIds([]);
+  }, []);
+
+  // V2: Handle signing selected messages
+  const handleSignMessages = useCallback(() => {
+    console.log('[Chat] Sign button pressed, selected messages:', selectedMessageIds);
+    // TODO: Open signature modal (Task 2.2)
+    // For now, just log
+    Alert.alert('Sign Messages', `You selected ${selectedMessageIds.length} messages to sign. Signature modal coming in next task.`);
+  }, [selectedMessageIds]);
+
+  // V2: Toggle between translate and sign modes
+  const handleToggleLongPressMode = useCallback(() => {
+    const newMode = longPressMode === 'translate' ? 'sign' : 'translate';
+    console.log('[Chat] Toggling long-press mode from', longPressMode, 'to', newMode);
+    setLongPressMode(newMode);
+    // Cancel selection if switching away from sign mode
+    if (newMode === 'translate' && selectionMode) {
+      handleCancelSelection();
+    }
+  }, [longPressMode, selectionMode, handleCancelSelection]);
 
   // V1: Handler for picking and uploading images
   const handlePickImage = async () => {
@@ -553,6 +629,8 @@ export default function ChatScreen() {
     // Render message
     const message = item.data;
     const isOwnMessage = message.senderId === user?.uid;
+    // V2: Check if message is selected
+    const isSelected = selectedMessageIds.includes(message.id);
 
     // Milestone 10: In group chats, show sender name for ALL messages (including your own)
     const shouldShowSenderName = isGroupChat;
@@ -585,8 +663,23 @@ export default function ChatScreen() {
             message.status === 'failed' && { backgroundColor: '#FF3B30' },
             // V1: Adjust padding for images
             message.mediaUrl && { padding: 4 },
+            // V2: Highlight selected messages
+            isSelected && { borderWidth: 2, borderColor: '#34C759' },
           ]}
         >
+          {/* V2: Selection checkbox inside bubble */}
+          {selectionMode && (
+            <View style={[
+              styles.selectionCheckboxInside,
+              isOwnMessage && styles.selectionCheckboxInsideOwn
+            ]}>
+              <Ionicons
+                name={isSelected ? 'checkbox' : 'square-outline'}
+                size={20}
+                color={isSelected ? '#34C759' : isOwnMessage ? '#fff' : '#666'}
+              />
+            </View>
+          )}
           {/* V1: Display image if present */}
           {message.mediaUrl && (
             <TouchableOpacity
@@ -742,6 +835,21 @@ export default function ChatScreen() {
             </View>
           )}
         </View>
+
+        {/* V2: Long-press mode toggle button */}
+        <TouchableOpacity
+          style={[
+            styles.modeToggleButton,
+            { backgroundColor: longPressMode === 'sign' ? '#34C759' : '#999' }
+          ]}
+          onPress={handleToggleLongPressMode}
+        >
+          <Ionicons
+            name={longPressMode === 'translate' ? 'language' : 'create-outline'}
+            size={20}
+            color="#fff"
+          />
+        </TouchableOpacity>
       </View>
 
       {/* V1: Typing Indicator */}
@@ -750,6 +858,30 @@ export default function ChatScreen() {
           <ThemedText style={styles.typingIndicatorText}>
             {getTypingIndicatorText}
           </ThemedText>
+        </View>
+      )}
+
+      {/* V2: Selection bar when in selection mode */}
+      {selectionMode && (
+        <View style={[styles.selectionBar, { borderBottomColor: borderColor, backgroundColor }]}>
+          <ThemedText style={styles.selectionBarText}>
+            {selectedMessageIds.length} message{selectedMessageIds.length !== 1 ? 's' : ''} selected
+          </ThemedText>
+          <View style={styles.selectionBarButtons}>
+            <TouchableOpacity
+              style={[styles.selectionBarButton, { backgroundColor: tintColor }]}
+              onPress={handleSignMessages}
+              disabled={selectedMessageIds.length === 0}
+            >
+              <ThemedText style={styles.selectionBarButtonText}>Sign</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.selectionBarButton, { backgroundColor: '#999' }]}
+              onPress={handleCancelSelection}
+            >
+              <ThemedText style={styles.selectionBarButtonText}>Cancel</ThemedText>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1168,5 +1300,51 @@ const styles = StyleSheet.create({
   loadMoreText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  // V2: Mode toggle button styles
+  modeToggleButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  // V2: Selection mode styles
+  selectionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  selectionBarText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  selectionBarButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  selectionBarButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  selectionBarButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  selectionCheckboxInside: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    zIndex: 10,
+  },
+  selectionCheckboxInsideOwn: {
+    left: 'auto',
+    right: 4,
   },
 });
