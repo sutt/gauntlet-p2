@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Modal,
   View,
   Text,
   TextInput,
@@ -45,6 +44,18 @@ export default function TranslationModal({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TranslationResponse | null>(null);
   const [error, setError] = useState('');
+  const [canClose, setCanClose] = useState(false);
+
+  // Enable backdrop closing after a short delay to prevent immediate close on touch release
+  React.useEffect(() => {
+    if (visible) {
+      setCanClose(false);
+      const timer = setTimeout(() => {
+        setCanClose(true);
+      }, 300); // 300ms delay
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
 
   const handleTranslate = async () => {
     if (!targetLanguage.trim()) {
@@ -79,16 +90,30 @@ export default function TranslationModal({
     onClose();
   };
 
+  const handleBackdropPress = () => {
+    if (canClose) {
+      handleClose();
+    }
+  };
+
+  // Use custom overlay instead of Modal to avoid React Native Web freeze bugs
+  if (!visible) {
+    return null;
+  }
+
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={handleClose}
-    >
+    <View style={[styles.modalOverlay, StyleSheet.absoluteFillObject]}>
+      {/* Backdrop */}
+      <TouchableOpacity
+        style={StyleSheet.absoluteFill}
+        activeOpacity={1}
+        onPress={handleBackdropPress}
+      />
+
+      {/* Modal Content */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalOverlay}
+        style={styles.modalWrapper}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -219,15 +244,19 @@ export default function TranslationModal({
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   modalOverlay: {
-    flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  modalWrapper: {
+    flex: 1,
     justifyContent: 'flex-end',
+    pointerEvents: 'box-none',
   },
   modalContainer: {
     backgroundColor: '#fff',
@@ -235,6 +264,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     maxHeight: '90%',
     paddingBottom: 20,
+    pointerEvents: 'auto',
   },
   modalHeader: {
     flexDirection: 'row',
