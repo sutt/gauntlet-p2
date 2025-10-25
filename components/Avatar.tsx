@@ -38,34 +38,8 @@ export function Avatar({
     }
   }
 
-  if (profileImageUrl && !imageError) {
-    // Show profile image with error fallback
-    return (
-      <Image
-        source={{ uri: profileImageUrl }}
-        style={[
-          styles.avatar,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-          },
-          style as any, // Cast to any to allow ViewStyle
-        ]}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        transition={200}
-        placeholder={require('@/assets/images/partial-react-logo.png')}
-        placeholderContentFit="cover"
-        onError={() => {
-          setImageError(true);
-        }}
-      />
-    );
-  }
-
-  // Show initials with colored background
-  return (
+  // Always render initials as base layer
+  const initialsView = (
     <View
       style={[
         styles.avatar,
@@ -92,6 +66,35 @@ export function Avatar({
       </ThemedText>
     </View>
   );
+
+  // If there's a profile image URL and no error, overlay image on top of initials
+  if (profileImageUrl && !imageError) {
+    return (
+      <View style={[{ width: size, height: size }, style]}>
+        {/* Initials as background/fallback */}
+        {initialsView}
+        {/* Image overlay */}
+        <Image
+          source={{ uri: profileImageUrl }}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderRadius: size / 2,
+            },
+          ]}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
+          onError={() => {
+            setImageError(true);
+          }}
+        />
+      </View>
+    );
+  }
+
+  // Show just initials if no image or error
+  return initialsView;
 }
 
 const styles = StyleSheet.create({
