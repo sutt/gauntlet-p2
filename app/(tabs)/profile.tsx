@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth';
 import { getUser, updateUserProfile } from '@/services/users';
 import { pickImage, uploadProfileImage, ImageUploadProgress } from '@/utils/image';
 import { signOut } from 'firebase/auth';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -21,7 +21,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { User } from '@/types/chat';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 
 export default function ProfileScreen() {
@@ -35,6 +35,7 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [hasSignatureKeys, setHasSignatureKeys] = useState(false);
   const [signatureFingerprint, setSignatureFingerprint] = useState('');
+  const [showKeysModal, setShowKeysModal] = useState(false);
 
   const router = useRouter();
   const tintColor = useThemeColor({}, 'tint');
@@ -58,42 +59,48 @@ export default function ProfileScreen() {
     loadProfile();
   }, [authUser]);
 
-  // Check for signature keys
-  useEffect(() => {
-    if (!authUser) return;
+  // Check for signature keys whenever screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (!authUser) return;
 
-    const checkSignatureKeys = async () => {
-      try {
-        const userDoc = await getDoc(doc(db, 'users', authUser.uid));
-        const data = userDoc.data();
+      const checkSignatureKeys = async () => {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', authUser.uid));
+          const data = userDoc.data();
 
-        if (data?.publicKey) {
-          setHasSignatureKeys(true);
-          setSignatureFingerprint(data.publicKeyFingerprint || '');
-        } else {
-          setHasSignatureKeys(false);
-          setSignatureFingerprint('');
+          if (data?.publicKey) {
+            setHasSignatureKeys(true);
+            setSignatureFingerprint(data.publicKeyFingerprint || '');
+            console.log('[Profile] Keys detected. Fingerprint:', data.publicKeyFingerprint);
+          } else {
+            setHasSignatureKeys(false);
+            setSignatureFingerprint('');
+            console.log('[Profile] No keys found');
+          }
+        } catch (error) {
+          console.error('Error checking signature keys:', error);
         }
-      } catch (error) {
-        console.error('Error checking signature keys:', error);
-      }
-    };
+      };
 
-    checkSignatureKeys();
-  }, [authUser]);
+      checkSignatureKeys();
+    }, [authUser])
+  );
 
   const handleSignOut = async () => {
     await signOut(auth);
   };
 
   const handleDigitalSignatures = () => {
+    console.log('[Profile] handleDigitalSignatures called');
+    console.log('[Profile] hasSignatureKeys:', hasSignatureKeys);
+    console.log('[Profile] signatureFingerprint:', signatureFingerprint);
+
     if (hasSignatureKeys) {
-      Alert.alert(
-        'Digital Signatures',
-        `Keys are already configured.\n\nFingerprint: ${signatureFingerprint.substring(0, 20)}...`,
-        [{ text: 'OK' }]
-      );
+      console.log('[Profile] Showing keys modal');
+      setShowKeysModal(true);
     } else {
+      console.log('[Profile] Navigating to setup screen');
       router.push('/settings/signature-setup');
     }
   };
@@ -406,6 +413,77 @@ export default function ProfileScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Digital Signatures Keys Modal */}
+      <Modal
+        visible={showKeysModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowKeysModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={[styles.modalContent, { backgroundColor }]}>
+              {/* Header */}
+              <View style={styles.modalHeader}>
+                <ThemedText type="subtitle" style={styles.modalTitle}>
+                  Digital Signatures
+                </ThemedText>
+                <TouchableOpacity onPress={() => setShowKeysModal(false)}>
+                  <Ionicons name="close" size={28} color={textColor} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Status */}
+              <View style={styles.keysStatusSection}>
+                <View style={styles.statusBadge}>
+                  <Ionicons name="shield-checkmark" size={24} color="green" />
+                  <ThemedText style={styles.statusText}>Keys Configured</ThemedText>
+                </View>
+                <ThemedText style={styles.statusDescription}>
+                  Your signature keys are set up and ready to use. You can now sign messages in conversations.
+                </ThemedText>
+              </View>
+
+              {/* Fingerprint */}
+              <View style={styles.fingerprintSection}>
+                <ThemedText style={styles.inputLabel}>Key Fingerprint:</ThemedText>
+                <View style={[styles.fingerprintBox, { borderColor, backgroundColor: backgroundColor + '80' }]}>
+                  <ThemedText style={styles.fingerprintText} selectable>
+                    {signatureFingerprint}
+                  </ThemedText>
+                </View>
+                <ThemedText style={styles.fingerprintHint}>
+                  This unique identifier proves your key's authenticity
+                </ThemedText>
+              </View>
+
+              {/* Info */}
+              <View style={styles.keysInfoSection}>
+                <ThemedText style={styles.infoTitle}>About Digital Signatures:</ThemedText>
+                <ThemedText style={styles.infoText}>• Sign messages to prove authenticity</ThemedText>
+                <ThemedText style={styles.infoText}>• AI agents can verify your signatures</ThemedText>
+                <ThemedText style={styles.infoText}>• Signatures are tamper-proof</ThemedText>
+                <ThemedText style={styles.infoText}>• Keys are stored securely on the server</ThemedText>
+              </View>
+
+              {/* Actions */}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.saveButton,
+                    { backgroundColor: tintColor },
+                  ]}
+                  onPress={() => setShowKeysModal(false)}
+                >
+                  <ThemedText style={styles.saveButtonText}>OK</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -562,5 +640,64 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  // Digital Signatures Modal styles
+  keysStatusSection: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  statusText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'green',
+  },
+  statusDescription: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.8,
+    lineHeight: 20,
+  },
+  fingerprintSection: {
+    marginBottom: 20,
+  },
+  fingerprintBox: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  fingerprintText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    lineHeight: 18,
+    wordBreak: 'break-all',
+  },
+  fingerprintHint: {
+    fontSize: 12,
+    opacity: 0.6,
+    fontStyle: 'italic',
+  },
+  keysInfoSection: {
+    marginBottom: 20,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 13,
+    lineHeight: 20,
+    opacity: 0.8,
+    marginBottom: 4,
   },
 });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/config/firebase';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,8 @@ import type { GenerateKeysResponse } from '@/types/signature';
 export default function SignatureSetupScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [generatedFingerprint, setGeneratedFingerprint] = useState('');
   const router = useRouter();
 
   const handleGenerateKeys = async () => {
@@ -22,16 +24,9 @@ export default function SignatureSetupScreen() {
       console.log('[UI] Keys generated:', result.data);
 
       if (result.data.success) {
-        Alert.alert(
-          'Success',
-          'Your signature keys have been generated successfully!',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.back()
-            }
-          ]
-        );
+        const fingerprint = result.data.fingerprint || '';
+        setGeneratedFingerprint(fingerprint);
+        setShowSuccessModal(true);
       } else {
         setError(result.data.message || 'Failed to generate keys');
       }
@@ -96,6 +91,54 @@ export default function SignatureSetupScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowSuccessModal(false);
+          router.back();
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.successHeader}>
+                <Text style={styles.successIcon}>✓</Text>
+                <Text style={styles.successTitle}>Keys Generated Successfully!</Text>
+              </View>
+
+              <Text style={styles.successMessage}>
+                Your signature keys have been created and stored securely.
+              </Text>
+
+              <View style={styles.fingerprintSection}>
+                <Text style={styles.fingerprintLabel}>Key Fingerprint:</Text>
+                <ScrollView style={styles.fingerprintBox} horizontal>
+                  <Text style={styles.fingerprintText} selectable>
+                    {generatedFingerprint}
+                  </Text>
+                </ScrollView>
+                <Text style={styles.fingerprintHint}>
+                  This unique identifier proves your key's authenticity
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.successButton}
+                onPress={() => {
+                  setShowSuccessModal(false);
+                  router.back();
+                }}
+              >
+                <Text style={styles.successButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -200,5 +243,86 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     lineHeight: 18
-  }
+  },
+  // Success Modal styles
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContainer: {
+    width: '90%',
+    maxWidth: 500,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  successHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  successIcon: {
+    fontSize: 64,
+    color: 'green',
+    marginBottom: 12,
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  fingerprintSection: {
+    marginBottom: 24,
+  },
+  fingerprintLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  fingerprintBox: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    maxHeight: 80,
+  },
+  fingerprintText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: '#333',
+    lineHeight: 18,
+  },
+  fingerprintHint: {
+    fontSize: 11,
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  successButton: {
+    backgroundColor: '#1976d2',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  successButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 });
