@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   Alert,
   View,
-  Modal,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -332,18 +331,19 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Edit Display Name Modal */}
-      <Modal
-        visible={editModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={handleCancelEdit}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalContainer}>
+      {/* Edit Display Name Modal - Custom Overlay (web-compatible) */}
+      {editModalVisible && (
+        <View style={[styles.modalOverlay, StyleSheet.absoluteFillObject]}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={handleCancelEdit}
+            disabled={saving}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContainer}
+          >
             <View style={[styles.modalContent, { backgroundColor }]}>
               {/* Header */}
               <View style={styles.modalHeader}>
@@ -410,18 +410,18 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          </KeyboardAvoidingView>
+        </View>
+      )}
 
-      {/* Digital Signatures Keys Modal */}
-      <Modal
-        visible={showKeysModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowKeysModal(false)}
-      >
-        <View style={styles.modalOverlay}>
+      {/* Digital Signatures Keys Modal - Custom Overlay (web-compatible) */}
+      {showKeysModal && (
+        <View style={[styles.modalOverlay, StyleSheet.absoluteFillObject]}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowKeysModal(false)}
+          />
           <View style={styles.modalContainer}>
             <View style={[styles.modalContent, { backgroundColor }]}>
               {/* Header */}
@@ -483,7 +483,7 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
-      </Modal>
+      )}
     </ThemedView>
   );
 }
@@ -676,7 +676,6 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 12,
     lineHeight: 18,
-    wordBreak: 'break-all',
   },
   fingerprintHint: {
     fontSize: 12,
