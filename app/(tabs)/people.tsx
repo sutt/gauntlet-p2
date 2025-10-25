@@ -75,32 +75,52 @@ export default function PeopleScreen() {
   }, [searchQuery, users]);
 
   const handleUserPress = (user: User) => {
-    setSelectedUser(user);
+    console.log('[People] User pressed:', user.id, user.displayName);
+    // Use setTimeout to prevent blocking the UI thread
+    setTimeout(() => {
+      console.log('[People] Setting selected user...');
+      try {
+        setSelectedUser(user);
+        console.log('[People] Selected user set successfully');
+      } catch (error) {
+        console.error('[People] Error setting selected user:', error);
+      }
+    }, 0);
   };
 
   const handleCloseModal = () => {
+    console.log('[People] Closing modal');
     setSelectedUser(null);
+    setCreatingChat(false); // Reset creating state
   };
 
   const handleStartChat = async () => {
-    if (!authUser || !selectedUser) return;
+    if (!authUser || !selectedUser) {
+      console.warn('[People] handleStartChat called without authUser or selectedUser');
+      return;
+    }
+
+    console.log('[People] Starting chat with:', selectedUser.id);
 
     try {
       setCreatingChat(true);
 
       // Create or get existing conversation
+      console.log('[People] Calling getOrCreateDirectConversation...');
       const conversationId = await getOrCreateDirectConversation(
         authUser.uid,
         selectedUser.id
       );
+      console.log('[People] Got conversation ID:', conversationId);
 
       // Close modal
       setSelectedUser(null);
 
       // Navigate to chat
+      console.log('[People] Navigating to chat:', conversationId);
       router.push(`/chat/${conversationId}`);
     } catch (error: any) {
-      console.error('Error starting chat:', error);
+      console.error('[People] Error starting chat:', error);
       Alert.alert('Error', error.message || 'Failed to start chat');
     } finally {
       setCreatingChat(false);
@@ -114,7 +134,10 @@ export default function PeopleScreen() {
     return user.lastSeen.getTime() > fiveMinutesAgo;
   };
 
-  const renderUserItem = ({ item }: { item: User }) => {
+  // Memoize key extractor
+  const keyExtractor = React.useCallback((item: User) => item.id, []);
+
+  const renderUserItem = React.useCallback(({ item }: { item: User }) => {
     const online = isUserOnline(item);
 
     return (
@@ -140,7 +163,7 @@ export default function PeopleScreen() {
         <Ionicons name="chevron-forward" size={20} color={mutedColor} />
       </TouchableOpacity>
     );
-  };
+  }, [borderColor, backgroundColor, mutedColor]);
 
   if (loading) {
     return (
@@ -193,76 +216,111 @@ export default function PeopleScreen() {
         <FlatList
           data={filteredUsers}
           renderItem={renderUserItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
         />
       )}
 
       {/* User Profile Modal */}
       {selectedUser && (
-        <Modal
-          visible={true}
-          animationType="fade"
-          transparent={true}
-          onRequestClose={handleCloseModal}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor }]}>
-              {/* Close Button */}
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={handleCloseModal}
-                disabled={creatingChat}
-              >
-                <Ionicons name="close" size={28} color={textColor} />
-              </TouchableOpacity>
+        <View style={[styles.modalOverlay, StyleSheet.absoluteFillObject]}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={handleCloseModal}
+          />
+          <View style={[styles.modalContent, { backgroundColor }]}>
+            {selectedUser ? (
+                <>
+                  {(() => {
+                    console.log('[People] Rendering modal content for:', selectedUser.id);
+                    return null;
+                  })()}
+                  {/* Close Button */}
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={handleCloseModal}
+                    disabled={creatingChat}
+                  >
+                    <Ionicons name="close" size={28} color={textColor} />
+                  </TouchableOpacity>
 
-              {/* User Info */}
-              <View style={styles.modalUserInfo}>
-                <Avatar
-                  userId={selectedUser.id}
-                  displayName={selectedUser.displayName}
-                  profileImageUrl={selectedUser.profileImageUrl}
-                  size={100}
-                />
+                  {/* User Info */}
+                  <View style={styles.modalUserInfo}>
+                    {(() => {
+                      console.log('[People] Rendering Avatar for:', selectedUser.id, 'url:', selectedUser.profileImageUrl);
+                      return null;
+                    })()}
+                    {/* TEMPORARY: Avatar disabled for debugging */}
+                    <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#ccc' }} />
 
-                <ThemedText type="title" style={styles.modalDisplayName}>
-                  {selectedUser.displayName}
-                </ThemedText>
-
-                <ThemedText style={[styles.modalEmail, { color: mutedColor }]}>
-                  {selectedUser.email}
-                </ThemedText>
-
-                {isUserOnline(selectedUser) && (
-                  <View style={styles.onlineStatus}>
-                    <View style={styles.onlineStatusDot} />
-                    <ThemedText style={[styles.onlineStatusText, { color: tintColor }]}>
-                      Online
+                    {(() => {
+                      console.log('[People] Rendering display name');
+                      return null;
+                    })()}
+                    <ThemedText type="title" style={styles.modalDisplayName}>
+                      {selectedUser.displayName}
                     </ThemedText>
-                  </View>
-                )}
-              </View>
 
-              {/* Actions */}
-              <TouchableOpacity
-                style={[styles.messageButton, { backgroundColor: tintColor }]}
-                onPress={handleStartChat}
-                disabled={creatingChat}
-              >
-                {creatingChat ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="chatbubble" size={20} color="#fff" />
-                    <ThemedText style={styles.messageButtonText}>Message</ThemedText>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+                    {(() => {
+                      console.log('[People] Rendering email');
+                      return null;
+                    })()}
+                    <ThemedText style={[styles.modalEmail, { color: mutedColor }]}>
+                      {selectedUser.email}
+                    </ThemedText>
+
+                    {(() => {
+                      console.log('[People] Checking isUserOnline for:', selectedUser.id);
+                      const online = isUserOnline(selectedUser);
+                      console.log('[People] isUserOnline result:', online);
+                      return null;
+                    })()}
+                    {isUserOnline(selectedUser) && (
+                      <View style={styles.onlineStatus}>
+                        {(() => {
+                          console.log('[People] Rendering online status');
+                          return null;
+                        })()}
+                        <View style={styles.onlineStatusDot} />
+                        <ThemedText style={[styles.onlineStatusText, { color: tintColor }]}>
+                          Online
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Actions */}
+                  {(() => {
+                    console.log('[People] Rendering message button, creatingChat:', creatingChat);
+                    return null;
+                  })()}
+                  <TouchableOpacity
+                    style={[styles.messageButton, { backgroundColor: tintColor }]}
+                    onPress={handleStartChat}
+                    disabled={creatingChat}
+                  >
+                    {(() => {
+                      console.log('[People] Rendering button content');
+                      return null;
+                    })()}
+                    {creatingChat ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="chatbubble" size={20} color="#fff" />
+                        <ThemedText style={styles.messageButtonText}>Message</ThemedText>
+                      </>
+                    )}
+                  </TouchableOpacity>
+              </>
+            ) : null}
           </View>
-        </Modal>
+        </View>
       )}
     </ThemedView>
   );
@@ -349,10 +407,15 @@ const styles = StyleSheet.create({
   },
   // Modal styles
   modalOverlay: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
   },
   modalContent: {
     width: '85%',
