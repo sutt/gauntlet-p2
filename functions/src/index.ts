@@ -358,3 +358,202 @@ export const generateKeysForUser = onCall(
     }
   }
 );
+
+/**
+ * Sign Messages Cloud Function (Digital Signatures v2)
+ *
+ * Signs selected messages with user's private key stored on server.
+ * Creates a signature document in users/{uid}/signatures/{signatureId}.
+ *
+ * Features:
+ * - Server-side signing with OpenPGP.js
+ * - Adds server metadata (timestamp, nonce)
+ * - Stores signature in Firestore
+ * - Updates message documents with signature reference
+ * - Validates conversation access
+ *
+ * Security (POC):
+ * - Trusts client-provided payload (conversation/messages)
+ * - Private keys stored unencrypted in Firestore
+ */
+export const signMessages = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 60,
+    invoker: 'public',
+    cors: [
+      'http://localhost:8081',
+      'http://localhost:19006',
+      /^https:\/\/.*\.vercel\.app$/,
+    ],
+  },
+  async (request) => {
+    const startTime = Date.now();
+
+    // 1. Check authentication
+    const disableAuthCheck = process.env.DISABLE_AUTH_CHECK === 'true';
+    if (!disableAuthCheck && !request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be logged in to sign messages');
+    }
+
+    const userId = request.auth?.uid || 'shell-test-user';
+    const { conversationId, payload } = request.data;
+
+    console.log('[SIGN] Signing messages for user:', userId);
+    console.log('[SIGN] Conversation:', conversationId);
+    console.log('[SIGN] Message count:', payload?.messages?.length || 0);
+
+    // 2. Validate input
+    if (!conversationId || !payload) {
+      throw new HttpsError('invalid-argument', 'Missing required fields: conversationId and payload');
+    }
+
+    if (!payload.messages || payload.messages.length === 0) {
+      throw new HttpsError('invalid-argument', 'No messages to sign');
+    }
+
+    try {
+      // 3. Validate conversation access
+      const convDoc = await db.collection('conversations').doc(conversationId).get();
+
+      if (!convDoc.exists) {
+        throw new HttpsError('not-found', 'Conversation not found');
+      }
+
+      const participants = convDoc.data()?.participants || [];
+      if (!disableAuthCheck && !participants.includes(userId)) {
+        throw new HttpsError('permission-denied', 'Not a participant in this conversation');
+      }
+
+      // 4. Fetch private key
+      const userDoc = await db.collection('users').doc(userId).get();
+      const privateKeyArmored = userDoc.data()?.privateKey;
+
+      if (!privateKeyArmored) {
+        throw new HttpsError(
+          'failed-precondition',
+          'No signature keys found. Please generate keys first in Settings > Digital Signatures.'
+        );
+      }
+
+      // 5. Add server metadata to payload
+      payload.timestamp = Date.now();
+      payload.signedAt = new Date().toISOString();
+      payload.nonce = generateNonce();
+      payload.version = '2.0';
+
+      console.log('[SIGN] Payload prepared:', {
+        signer: payload.signerId,
+        timestamp: payload.timestamp,
+        nonce: payload.nonce,
+        messageCount: payload.messages.length,
+      });
+
+      // 6. Serialize payload
+      const payloadText = JSON.stringify(payload, null, 2);
+      console.log('[SIGN] Payload size:', payloadText.length, 'bytes');
+
+      // 7. Sign payload with OpenPGP
+      console.log('[SIGN] Signing with OpenPGP...');
+      const signStartTime = Date.now();
+
+      const privateKey = await openpgp.readPrivateKey({
+        armoredKey: privateKeyArmored,
+      });
+
+      const message = await openpgp.createMessage({ text: payloadText });
+      const signatureResult = await openpgp.sign({
+        message,
+        signingKeys: privateKey,
+        format: 'armored',
+        detached: false,
+      });
+
+      // Convert to string if needed
+      const signature = typeof signatureResult === 'string' ? signatureResult : String(signatureResult);
+
+      const signTime = Date.now() - signStartTime;
+      console.log('[SIGN] Signing took:', signTime, 'ms');
+      console.log('[SIGN] Signature length:', signature.length, 'characters');
+
+      // 8. Create signature document
+      const signatureId = db.collection('_').doc().id;
+
+      await db
+        .collection('users')
+        .doc(userId)
+        .collection('signatures')
+        .doc(signatureId)
+        .set({
+          signatureId,
+          signedPayload: payload,
+          pgpSignature: signature,
+          createdAt: new Date(),
+          conversationId,
+          messageIds: payload.messages.map((m: any) => m.messageId),
+          purpose: payload.purpose || undefined,
+          verified: false, // Will be set by AI agent verification (future)
+        });
+
+      console.log('[SIGN] Signature document created:', signatureId);
+
+      // 9. Update message documents with signature reference (batch)
+      const batch = db.batch();
+
+      payload.messages.forEach((msg: any) => {
+        const msgRef = db
+          .collection('conversations')
+          .doc(conversationId)
+          .collection('messages')
+          .doc(msg.messageId);
+
+        console.log('[SIGN] Adding signature reference to message:', msg.messageId);
+
+        // Note: Using set with merge to avoid issues if message doesn't have these fields yet
+        batch.set(
+          msgRef,
+          {
+            signatureIds: [signatureId], // Array of signature IDs
+            signatureCount: 1,
+          },
+          { merge: true }
+        );
+      });
+
+      await batch.commit();
+      console.log('[SIGN] ✓ Message documents updated with signature reference. Updated', payload.messages.length, 'messages');
+
+      const totalTime = Date.now() - startTime;
+      console.log('[SIGN] ✓ Signing completed successfully. Total time:', totalTime, 'ms');
+
+      return {
+        success: true,
+        signatureId,
+        pgpSignature: signature,
+        timings: {
+          signing: signTime,
+          total: totalTime,
+        },
+      };
+    } catch (error: any) {
+      console.error('[SIGN] Error signing messages:', error);
+
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      throw new HttpsError('internal', `Signing error: ${error.message}`);
+    }
+  }
+);
+
+/**
+ * Generate a random nonce for replay protection
+ */
+function generateNonce(): string {
+  return (
+    Math.random().toString(36).substring(2, 15) +
+    Math.random().toString(36).substring(2, 15)
+  );
+}

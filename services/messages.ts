@@ -63,6 +63,9 @@ const convertDocToMessage = (doc: any): Message => {
     mediaUrl: data.mediaUrl,
     mediaPath: data.mediaPath,
     mediaMetadata: data.mediaMetadata,
+    // V2: Digital signature support
+    signatureIds: data.signatureIds,
+    signatureCount: data.signatureCount,
   };
 };
 

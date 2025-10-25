@@ -30,6 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import TranslationModal from '@/components/TranslationModal';
+import SignatureModal from '@/components/SignatureModal';
 import { Image } from 'expo-image';
 import { Avatar } from '@/components/Avatar';
 
@@ -82,6 +83,8 @@ export default function ChatScreen() {
   const [longPressMode, setLongPressMode] = useState<'translate' | 'sign'>('translate');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [conversationParticipants, setConversationParticipants] = useState<Array<{ email: string; displayName: string }>>([]);
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -138,6 +141,7 @@ export default function ChatScreen() {
 
   // Milestone 8: Fetch conversation and other user's profile
   // Milestone 10: Also detect if this is a group chat
+  // V2: Also fetch participant data for signatures
   useEffect(() => {
     if (!id || !user) return;
 
@@ -152,6 +156,18 @@ export default function ChatScreen() {
       if (isGroup && conversation.groupName) {
         setGroupName(conversation.groupName);
       }
+
+      // V2: Fetch all participant profiles for signatures
+      const participantProfiles = await Promise.all(
+        conversation.participants.map(async (uid) => {
+          const profile = await getUser(uid);
+          return {
+            email: profile?.email || uid,
+            displayName: profile?.displayName || 'Unknown',
+          };
+        })
+      );
+      setConversationParticipants(participantProfiles);
 
       // Get the other user(s) in the conversation
       const otherUserId = conversation.participants.find(p => p !== user.uid);
@@ -451,10 +467,18 @@ export default function ChatScreen() {
   // V2: Handle signing selected messages
   const handleSignMessages = useCallback(() => {
     console.log('[Chat] Sign button pressed, selected messages:', selectedMessageIds);
-    // TODO: Open signature modal (Task 2.2)
-    // For now, just log
-    Alert.alert('Sign Messages', `You selected ${selectedMessageIds.length} messages to sign. Signature modal coming in next task.`);
+    console.log('[Chat] Opening signature modal');
+    setShowSignatureModal(true);
   }, [selectedMessageIds]);
+
+  // V2: Handle signature modal close
+  const handleSignatureModalClose = useCallback(() => {
+    console.log('[Chat] Signature modal closed, exiting selection mode');
+    setShowSignatureModal(false);
+    // Exit selection mode
+    setSelectionMode(false);
+    setSelectedMessageIds([]);
+  }, []);
 
   // V2: Toggle between translate and sign modes
   const handleToggleLongPressMode = useCallback(() => {
@@ -632,6 +656,11 @@ export default function ChatScreen() {
     // V2: Check if message is selected
     const isSelected = selectedMessageIds.includes(message.id);
 
+    // V2: Debug signature badge
+    if (message.signatureCount) {
+      console.log('[Chat] Message has signature:', message.id, 'count:', message.signatureCount);
+    }
+
     // Milestone 10: In group chats, show sender name for ALL messages (including your own)
     const shouldShowSenderName = isGroupChat;
 
@@ -755,6 +784,24 @@ export default function ChatScreen() {
                 </View>
               );
             })()}
+            {/* V2: Signature badge - NOTE: May be removed in future when signatures are better integrated */}
+            {message.signatureCount && message.signatureCount > 0 && (
+              <View style={styles.signatureBadgeContainer}>
+                <Ionicons
+                  name="create-outline"
+                  size={12}
+                  color={isOwnMessage ? '#fff' : '#666'}
+                />
+                <ThemedText
+                  style={[
+                    styles.signatureBadgeText,
+                    { color: isOwnMessage ? '#fff' : '#666' },
+                  ]}
+                >
+                  Signed
+                </ThemedText>
+              </View>
+            )}
           </View>
         </Pressable>
         {/* Milestone 7: Retry button for failed messages */}
@@ -1020,6 +1067,15 @@ export default function ChatScreen() {
         messageText={translationModal.messageText}
         conversationId={id}
         defaultTargetLanguage="Spanish"
+      />
+
+      {/* V2: Signature Modal */}
+      <SignatureModal
+        visible={showSignatureModal}
+        onClose={handleSignatureModalClose}
+        messages={allMessages.filter((m) => selectedMessageIds.includes(m.id))}
+        conversationId={id}
+        participants={conversationParticipants}
       />
 
       {/* V1: Full-screen image viewer */}
@@ -1346,5 +1402,17 @@ const styles = StyleSheet.create({
   selectionCheckboxInsideOwn: {
     left: 'auto',
     right: 4,
+  },
+  // V2: Signature badge styles
+  signatureBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 6,
+    opacity: 0.8,
+  },
+  signatureBadgeText: {
+    fontSize: 10,
+    marginLeft: 2,
+    fontWeight: '500',
   },
 });

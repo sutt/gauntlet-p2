@@ -74,4 +74,8 @@ export interface SignMessagesResponse {
   signatureId?: string;
   pgpSignature?: string;
   message?: string;                // Error message if success = false
+  timings?: {
+    signing: number;               // Time spent signing (ms)
+    total: number;                 // Total time (ms)
+  };
 }

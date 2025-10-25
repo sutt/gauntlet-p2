@@ -29,6 +29,10 @@ export interface Message {
     fileSize: number;
     mimeType: string;
   };
+
+  // V2: Digital signature support
+  signatureIds?: string[]; // Array of signature IDs that include this message
+  signatureCount?: number; // Number of signatures
 }
 
 // Milestone 10: Conversation types
