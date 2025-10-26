@@ -9,6 +9,7 @@ import {
   getSenderName,
 } from './services/contextRetrieval';
 import * as openpgp from 'openpgp';
+import { setupCreateBuyBotUser } from './setup/createBuyBotUser';
 
 // Initialize Firebase Admin SDK
 // Required because we use Firestore at module level (in this file and contextRetrieval.ts)
@@ -838,3 +839,13 @@ function generateNonce(): string {
     Math.random().toString(36).substring(2, 15)
   );
 }
+
+// ===================================================================
+// CHAI: AI Agent Setup Functions
+// ===================================================================
+
+/**
+ * One-time setup: Create BuyBot agent user
+ * Run via Functions shell: setupCreateBuyBotUser()
+ */
+export { setupCreateBuyBotUser };
