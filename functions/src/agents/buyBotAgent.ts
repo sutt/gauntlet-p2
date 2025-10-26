@@ -16,6 +16,7 @@ import { getConversationContext } from '../services/contextRetrieval';
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { getOpenAIKey, openaiApiKey } from '../config';
+import { verifySignatureForAgent } from '../index';
 
 const db = getFirestore();
 
@@ -93,7 +94,19 @@ export const onBuyBotMessage = onDocumentCreated(
         return;
       }
 
-      // 4. Process the user's message and respond normally
+      // 4. Check for signature attachment
+      if (message.attachedSignatureId) {
+        console.log('[BUYBOT] 📝 Signature attached, starting verification...');
+        await handleSignatureVerification(
+          conversationId,
+          message.senderId,
+          message.attachedSignatureId,
+          message.text || ''
+        );
+        return;
+      }
+
+      // 5. Process the user's message and respond normally
       await processUserMessage(conversationId, message);
 
     } catch (error: any) {
@@ -197,6 +210,64 @@ async function checkDirectPowerUserRequest(
   });
 
   return isPurchase;
+}
+
+/**
+ * Handle signature verification for purchase authorization
+ * Phase 4.1 & 4.2: Verify signature cryptographically and check authorization
+ */
+async function handleSignatureVerification(
+  conversationId: string,
+  userId: string,
+  signatureId: string,
+  requestText: string
+): Promise<void> {
+  console.log('[BUYBOT] 🔐 Starting signature verification:', {
+    signatureId: signatureId.substring(0, 12) + '...',
+    hasRequestText: !!requestText,
+  });
+
+  try {
+    // Phase 4.2: Verify signature cryptographically
+    const verification = await verifySignatureForAgent(userId, signatureId);
+
+    if (!verification.verified) {
+      const errorMsg = verification.error || 'Invalid signature';
+      console.log('[BUYBOT] ❌ Signature verification failed:', errorMsg);
+
+      await sendAgentMessage(
+        conversationId,
+        `❌ I cannot accept this signature. Verification failed: ${errorMsg}\n\n` +
+        `I'm cancelling this request. Please ensure you're attaching a valid signature from an authorized user.`
+      );
+      return;
+    }
+
+    // Verification succeeded
+    console.log('[BUYBOT] ✅ Signature verified successfully');
+
+    // Acknowledge receipt based on whether there's request text
+    const acknowledgment = requestText
+      ? `✅ Signature received and verified. I'm reviewing this authorization in the context of your request: "${requestText}"`
+      : `✅ Signature received and verified. I'm considering this authorization in the context of our conversation.`;
+
+    await sendAgentMessage(conversationId, acknowledgment);
+
+    // TODO Phase 4.3: Check if signer is a power user
+    // TODO Phase 4.4: Analyze signature payload relevance to request
+
+  } catch (error: any) {
+    console.log('[BUYBOT] ❌ Signature verification error:', {
+      error: error.message,
+      signatureId: signatureId.substring(0, 12) + '...',
+    });
+
+    await sendAgentMessage(
+      conversationId,
+      `❌ I encountered an error while verifying the signature: ${error.message}\n\n` +
+      `I'm cancelling this request. Please try again or contact support if the problem persists.`
+    );
+  }
 }
 
 /**
