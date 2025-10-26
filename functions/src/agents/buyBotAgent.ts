@@ -5,12 +5,17 @@
  * Responds to user messages and handles purchase authorization via signatures.
  *
  * Phase 1.3 & 1.4: Basic message trigger and response
+ * Phase 2.1: Conversation context retrieval
+ * Phase 2.2: LLM integration for intelligent responses
  */
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { getFirestore } from 'firebase-admin/firestore';
-import { BUYBOT_USER_ID } from '../config/agents';
+import { BUYBOT_USER_ID, getPowerUserIds } from '../config/agents';
 import { getConversationContext } from '../services/contextRetrieval';
+import { generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { getOpenAIKey } from '../config';
 
 const db = getFirestore();
 
@@ -82,6 +87,147 @@ export const onBuyBotMessage = onDocumentCreated(
 );
 
 /**
+ * Fetch email addresses for power users
+ * Used to inform BuyBot which users can authorize purchases
+ */
+async function getPowerUserEmails(): Promise<string[]> {
+  const powerUserIds = getPowerUserIds();
+  const emails: string[] = [];
+
+  console.log('[BUYBOT] Fetching emails for power users:', powerUserIds);
+
+  for (const userId of powerUserIds) {
+    try {
+      const userDoc = await db.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        const email = userDoc.data()?.email;
+        if (email) {
+          emails.push(email);
+          console.log('[BUYBOT] Found power user email:', email);
+        }
+      }
+    } catch (error: any) {
+      console.error('[BUYBOT] Error fetching user email for', userId, error);
+    }
+  }
+
+  return emails;
+}
+
+/**
+ * Build the system prompt for BuyBot
+ * Includes power user list and agent capabilities
+ */
+async function buildBuyBotPrompt(): Promise<string> {
+  const powerUserEmails = await getPowerUserEmails();
+  const powerUserList = powerUserEmails.length > 0
+    ? powerUserEmails.join(', ')
+    : 'None configured';
+
+  return `You are BuyBot, a purchasing assistant AI agent integrated into a messaging app.
+
+Your role:
+- Help users with purchase requests
+- Verify that purchases are authorized by power users via digital signatures
+- Provide friendly, professional assistance
+
+Power users (who can authorize purchases):
+${powerUserList}
+
+Key capabilities:
+- You can see conversation history to understand context
+- Users can attach digital signatures to messages for authorization
+- You validate signatures to ensure purchases are properly authorized
+- You are helpful, concise, and professional
+
+Guidelines:
+- Be friendly but professional
+- Ask clarifying questions when purchase requests are unclear
+- Explain the signature authorization process when needed
+- Keep responses concise (2-3 sentences usually)
+- If a purchase needs authorization, explain who can approve it
+
+Do NOT:
+- Approve purchases without proper signature verification
+- Make purchasing decisions yourself
+- Share sensitive information
+- Provide financial advice`;
+}
+
+/**
+ * Generate a mock response for TEST_MODE
+ * Simple acknowledgment without calling OpenAI
+ */
+function getMockResponse(userMessage: string, conversationHistory: string[]): string {
+  const contextNote = conversationHistory.length > 0
+    ? ` I can see we've exchanged ${conversationHistory.length} messages.`
+    : '';
+
+  return `[TEST MODE] Thanks for your message: "${userMessage}"${contextNote} I'm BuyBot, ready to help with purchases. In production, I'll use AI to provide intelligent responses!`;
+}
+
+/**
+ * Generate an intelligent response using OpenAI GPT-4
+ * Falls back to mock response if TEST_MODE is enabled
+ */
+async function generateBuyBotResponse(
+  userMessage: string,
+  conversationHistory: string[]
+): Promise<string> {
+  // Check if TEST_MODE is enabled
+  const testMode = process.env.TEST_MODE === 'true';
+
+  console.log('[BUYBOT] TEST_MODE check:', {
+    raw: process.env.TEST_MODE,
+    parsed: testMode,
+  });
+
+  if (testMode) {
+    console.log('[BUYBOT] TEST_MODE enabled, using mock response');
+    return getMockResponse(userMessage, conversationHistory);
+  }
+
+  console.log('[BUYBOT] TEST_MODE disabled, calling OpenAI...');
+
+  // Build the system prompt
+  const systemPrompt = await buildBuyBotPrompt();
+
+  // Format conversation history for the LLM
+  const historyContext = conversationHistory.length > 0
+    ? `\n\nConversation history:\n${conversationHistory.join('\n')}`
+    : '\n\n(This is the first message in the conversation)';
+
+  console.log('[BUYBOT] Calling OpenAI GPT-4...');
+
+  try {
+    const apiKey = getOpenAIKey();
+    const openai = createOpenAI({ apiKey });
+
+    const { text: responseText } = await generateText({
+      model: openai('gpt-4-turbo'),
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt,
+        },
+        {
+          role: 'user',
+          content: `${historyContext}\n\nLatest message: ${userMessage}`,
+        },
+      ],
+      temperature: 0.7,
+    });
+
+    console.log('[BUYBOT] ✓ OpenAI response generated');
+    return responseText;
+
+  } catch (error: any) {
+    console.error('[BUYBOT] Error calling OpenAI:', error);
+    return 'I apologize, I encountered an error processing your message. Please try again in a moment.';
+  }
+}
+
+/**
  * Process a user message and generate a response
  * Phase 2.1: Fetch conversation context (last 10 messages)
  * Phase 2.2: LLM integration for intelligent responses
@@ -106,20 +252,8 @@ async function processUserMessage(
     });
   }
 
-  // For now, send an acknowledgment with context info
-  // In Phase 2.2, we'll pass this context to GPT-4
-  const contextSummary = conversationHistory.length > 0
-    ? `\n\nConversation history (${conversationHistory.length} messages):\n${conversationHistory.slice(-3).join('\n')}`
-    : '\n\n(This is the first message in our conversation)';
-
-  const responseText = `Hello! I'm BuyBot, your purchasing assistant. I received your message: "${message.text}"${contextSummary}
-
-I'm currently in test mode. Once fully configured, I can help you with:
-- Purchase requests
-- Authorization verification
-- Signature validation
-
-Try sending me a purchase request!`;
+  // Phase 2.2: Generate intelligent response using LLM
+  const responseText = await generateBuyBotResponse(message.text, conversationHistory);
 
   await sendAgentMessage(conversationId, responseText);
 }
