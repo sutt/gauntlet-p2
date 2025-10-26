@@ -506,6 +506,31 @@ export const signMessages = onCall(
 
       console.log('[SIGN] Signature document created:', signatureId);
 
+      // Phase 3.3: Copy signature to other participants' collections
+      const otherParticipants = participants.filter((p: string) => p !== userId);
+      console.log('[SIGN] Copying signature to', otherParticipants.length, 'other participants');
+
+      if (otherParticipants.length > 0) {
+        // Check if this is a direct (1-on-1) conversation
+        const isDirect = participants.length === 2;
+
+        if (isDirect) {
+          // Copy signature to the other participant
+          for (const participantId of otherParticipants) {
+            await db
+              .collection('users')
+              .doc(participantId)
+              .collection('signatures')
+              .doc(signatureId)
+              .set(signatureDocData);
+            console.log('[SIGN] Copied signature to participant:', participantId);
+          }
+        } else {
+          // Group chat - log warning as per Phase 3 limitation
+          console.warn('[SIGN] ⚠️ Group chat signature distribution not supported yet. Participants:', participants.length);
+        }
+      }
+
       // 9. Update message documents with signature reference (batch)
       const batch = db.batch();
 
