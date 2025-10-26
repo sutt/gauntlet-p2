@@ -167,6 +167,14 @@ Add button next to send button:
 </View>
 ```
 
+**Updated Design Decisions (2025-10-26):**
+
+1. **Icon Choice**: Use `"attach"` (paperclip) for attachment button
+2. **Signature Filtering**: Show ALL signatures (both created and received)
+   - Rationale: Typically attached signatures will be received from others (e.g., power users providing authorization)
+   - Users need access to all signatures in their collection
+3. **Signature Preview**: Display full signature preview in chat (see section D above)
+
 **B. Signature Attachment Modal**
 
 New component: `components/SignatureAttachmentModal.tsx`
@@ -311,24 +319,93 @@ function SignatureAttachmentCard({ signature, onSelect }: SignatureAttachmentCar
 }
 ```
 
-**D. Signature Chip in Message Input**
+**D. Signature Preview in Chat Messages**
 
-Show attached signature as removable chip:
+**Updated Design Decision (2025-10-26):**
+
+When a message contains an attached signature, display a **signature preview** in the chat that clearly differentiates it from regular messages. The preview should show:
+
+- Who signed it (signer name/email)
+- How long ago it was signed (relative timestamp)
+- In which conversation it was created
+- Visual indication that it's a signature (not a chat message)
+
+**Visual Treatment:**
+- Similar to the signature drawer preview
+- Clearly distinguishable from regular chat bubbles
+- Shows key metadata at a glance
 
 ```tsx
-// In chat input area
-{attachedSignature && (
-  <View style={styles.signatureChip}>
-    <Ionicons name="document-text" size={16} color={tintColor} />
-    <ThemedText style={styles.chipText}>
-      Signature: {attachedSignature.signatureId.substring(0, 8)}...
-    </ThemedText>
-    <TouchableOpacity onPress={() => setAttachedSignature(null)}>
-      <Ionicons name="close-circle" size={18} color="#999" />
-    </TouchableOpacity>
-  </View>
+// In message rendering (when message has attachedSignatureId)
+{message.attachedSignatureId && (
+  <SignaturePreviewInChat
+    signatureId={message.attachedSignatureId}
+    senderId={message.senderId}
+  />
 )}
+
+// New component: SignaturePreviewInChat
+interface SignaturePreviewInChatProps {
+  signatureId: string;
+  senderId: string;
+}
+
+function SignaturePreviewInChat({ signatureId, senderId }: SignaturePreviewInChatProps) {
+  const [signature, setSignature] = useState<Signature | null>(null);
+
+  useEffect(() => {
+    // Fetch signature from user's collection
+    const fetchSignature = async () => {
+      const sigDoc = await getDoc(doc(db, 'users', senderId, 'signatures', signatureId));
+      if (sigDoc.exists()) {
+        setSignature({ ...sigDoc.data(), signatureId: sigDoc.id } as Signature);
+      }
+    };
+    fetchSignature();
+  }, [signatureId, senderId]);
+
+  if (!signature) return null;
+
+  const signer = signature.signedPayload.signerId;
+  const timestamp = formatRelativeTime(signature.createdAt);
+  const conversationId = signature.signedPayload.conversationId;
+
+  return (
+    <View style={styles.signaturePreview}>
+      {/* Icon to indicate this is a signature */}
+      <Ionicons name="ribbon" size={20} color={tintColor} />
+
+      <View style={styles.signatureContent}>
+        <ThemedText type="defaultSemiBold">
+          Signature from {signer}
+        </ThemedText>
+
+        <ThemedText style={styles.signatureMeta}>
+          Signed {timestamp} in conversation {conversationId.substring(0, 8)}...
+        </ThemedText>
+
+        {signature.verified && (
+          <View style={styles.verifiedBadge}>
+            <Ionicons name="checkmark-circle" size={14} color="#34C759" />
+            <ThemedText style={styles.verifiedText}>Verified</ThemedText>
+          </View>
+        )}
+      </View>
+
+      {/* Tap to view full signature details */}
+      <TouchableOpacity onPress={() => router.push(`/signatures/${signatureId}`)}>
+        <Ionicons name="chevron-forward" size={20} color="#999" />
+      </TouchableOpacity>
+    </View>
+  );
+}
 ```
+
+**Styling:**
+- Different background color from chat messages (e.g., subtle border, different tint)
+- Compact preview format
+- Tappable to view full signature details
+- Clear visual hierarchy (icon → signer → metadata)
 
 #### Data Structure
 

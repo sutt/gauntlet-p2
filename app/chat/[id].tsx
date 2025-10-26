@@ -85,6 +85,9 @@ export default function ChatScreen() {
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [conversationParticipants, setConversationParticipants] = useState<Array<{ email: string; displayName: string }>>([]);
+  // CHAI: Signature attachment state
+  const [showSignatureAttachmentModal, setShowSignatureAttachmentModal] = useState(false);
+  const [attachedSignature, setAttachedSignature] = useState<any | null>(null); // Will type properly when creating modal
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -1038,6 +1041,16 @@ export default function ChatScreen() {
             maxLength={5000}
             editable={!sending && !uploadingImage}
           />
+
+          {/* CHAI: Signature attachment button */}
+          <TouchableOpacity
+            style={styles.attachButton}
+            onPress={() => setShowSignatureAttachmentModal(true)}
+            disabled={sending || uploadingImage}
+          >
+            <Ionicons name="attach" size={24} color={tintColor} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -1077,6 +1090,30 @@ export default function ChatScreen() {
         conversationId={id}
         participants={conversationParticipants}
       />
+
+      {/* CHAI: Signature Attachment Modal - Placeholder (will implement in Phase 3.3) */}
+      <Modal
+        visible={showSignatureAttachmentModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowSignatureAttachmentModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="subtitle">Attach Signature</ThemedText>
+              <TouchableOpacity onPress={() => setShowSignatureAttachmentModal(false)}>
+                <Ionicons name="close" size={24} color={tintColor} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <ThemedText style={{ textAlign: 'center', opacity: 0.6 }}>
+                Signature attachment modal coming in Phase 3.3
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* V1: Full-screen image viewer */}
       <Modal
@@ -1257,6 +1294,13 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     fontSize: 16,
   },
+  // CHAI: Signature attachment button
+  attachButton: {
+    padding: 8,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   sendButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -1414,5 +1458,34 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginLeft: 2,
     fontWeight: '500',
+  },
+  // CHAI: Signature attachment modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    minHeight: 400,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  modalBody: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

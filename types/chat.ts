@@ -33,6 +33,9 @@ export interface Message {
   // V2: Digital signature support
   signatureIds?: string[]; // Array of signature IDs that include this message
   signatureCount?: number; // Number of signatures
+
+  // CHAI: Signature attachment for AI agent authorization
+  attachedSignatureId?: string; // Reference to signature in user's collection (for BuyBot approval)
 }
 
 // Milestone 10: Conversation types
