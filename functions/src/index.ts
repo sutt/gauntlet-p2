@@ -488,6 +488,7 @@ export const signMessages = onCall(
         createdAt: new Date(),
         conversationId,
         messageIds: payload.messages.map((m: any) => m.messageId),
+        signerId: userId, // Top-level field for easier querying
         verified: false, // Will be set by AI agent verification (future)
       };
 
