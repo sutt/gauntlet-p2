@@ -582,7 +582,127 @@ export const signMessages = onCall(
 );
 
 /**
- * V2 Phase 4: Verify a signature
+ * V2 Phase 4: Shared verification helper - Pure verification logic
+ * Used by both callable function and AI agents
+ */
+async function verifySignatureInternal(
+  signatureData: any,
+  publicKeyArmored: string
+): Promise<{ verified: boolean; verifyTime: number; error?: string }> {
+  const startVerify = Date.now();
+
+  try {
+    const payloadText = JSON.stringify(signatureData.signedPayload, null, 2);
+
+    console.log('[VERIFY-INTERNAL] Payload size:', payloadText.length, 'bytes');
+    console.log('[VERIFY-INTERNAL] Verifying with OpenPGP...');
+
+    const message = await openpgp.readMessage({
+      armoredMessage: signatureData.pgpSignature,
+    });
+
+    const publicKeyObj = await openpgp.readKey({
+      armoredKey: publicKeyArmored,
+    });
+
+    const verificationResult = await openpgp.verify({
+      message,
+      verificationKeys: publicKeyObj,
+    });
+
+    const verified = await verificationResult.signatures[0].verified;
+    const verifyTime = Date.now() - startVerify;
+
+    console.log('[VERIFY-INTERNAL] Verification result:', verified);
+    console.log('[VERIFY-INTERNAL] Verification took:', verifyTime, 'ms');
+
+    return { verified, verifyTime };
+  } catch (error: any) {
+    const verifyTime = Date.now() - startVerify;
+    console.error('[VERIFY-INTERNAL] Verification error:', error.message);
+    return { verified: false, verifyTime, error: error.message };
+  }
+}
+
+/**
+ * V2 Phase 4: Verify signature for AI agents (server-side only)
+ * AI agents call this to cryptographically verify before trusting payload
+ * Never trusts the 'verified' field in database
+ */
+export async function verifySignatureForAgent(
+  userId: string,
+  signatureId: string
+): Promise<{ verified: boolean; payload: any; error?: string }> {
+  console.log('[VERIFY-AGENT] Verifying signature for agent:', signatureId);
+
+  try {
+    // 1. Fetch signature document
+    const sigDoc = await db
+      .collection('users')
+      .doc(userId)
+      .collection('signatures')
+      .doc(signatureId)
+      .get();
+
+    if (!sigDoc.exists) {
+      throw new Error('Signature not found');
+    }
+
+    const signature = sigDoc.data();
+    if (!signature) {
+      throw new Error('Signature data missing');
+    }
+
+    console.log('[VERIFY-AGENT] Found signature, signer:', signature.signedPayload?.signerId);
+
+    // 2. Fetch signer's public key
+    const signerEmail = signature.signedPayload.signerId;
+
+    const userQuery = await db
+      .collection('users')
+      .where('email', '==', signerEmail)
+      .limit(1)
+      .get();
+
+    if (userQuery.empty) {
+      throw new Error('Signer not found: ' + signerEmail);
+    }
+
+    const signerData = userQuery.docs[0].data();
+    const publicKey = signerData.publicKey;
+
+    if (!publicKey) {
+      throw new Error('Signer has no public key');
+    }
+
+    console.log('[VERIFY-AGENT] Fetched signer public key');
+
+    // 3. Verify signature cryptographically (never trust DB)
+    const verifyResult = await verifySignatureInternal(signature, publicKey);
+
+    if (!verifyResult.verified) {
+      throw new Error('Signature verification failed: ' + (verifyResult.error || 'Invalid signature'));
+    }
+
+    console.log('[VERIFY-AGENT] ✓ Signature cryptographically verified');
+
+    // 4. Return trusted payload
+    return {
+      verified: true,
+      payload: signature.signedPayload,
+    };
+  } catch (error: any) {
+    console.error('[VERIFY-AGENT] Error:', error.message);
+    return {
+      verified: false,
+      payload: null,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * V2 Phase 4: Verify a signature (callable for users)
  * Allows users to manually verify signatures from the app
  */
 export const verifySignature = onCall(
@@ -652,35 +772,16 @@ export const verifySignature = onCall(
 
       console.log('[VERIFY] Fetched signer public key');
 
-      // 4. Verify signature using OpenPGP
-      const startVerify = Date.now();
-      const payloadText = JSON.stringify(signature.signedPayload, null, 2);
+      // 4. Verify signature using shared helper
+      const verifyResult = await verifySignatureInternal(signature, publicKey);
 
-      console.log('[VERIFY] Payload size:', payloadText.length, 'bytes');
-      console.log('[VERIFY] Verifying with OpenPGP...');
-
-      const message = await openpgp.readMessage({
-        armoredMessage: signature.pgpSignature,
-      });
-
-      const publicKeyObj = await openpgp.readKey({
-        armoredKey: publicKey,
-      });
-
-      const verificationResult = await openpgp.verify({
-        message,
-        verificationKeys: publicKeyObj,
-      });
-
-      const verified = await verificationResult.signatures[0].verified;
-      const verifyTime = Date.now() - startVerify;
-
-      console.log('[VERIFY] Verification result:', verified);
-      console.log('[VERIFY] Verification took:', verifyTime, 'ms');
+      if (verifyResult.error) {
+        throw new HttpsError('internal', verifyResult.error);
+      }
 
       // 5. Update verification status in Firestore
       await sigDoc.ref.update({
-        verified,
+        verified: verifyResult.verified,
         verifiedAt: new Date(),
         verifiedBy: userId,
       });
@@ -692,11 +793,11 @@ export const verifySignature = onCall(
 
       return {
         success: true,
-        verified,
+        verified: verifyResult.verified,
         signatureId,
         verifiedAt: new Date().toISOString(),
         timings: {
-          verification: verifyTime,
+          verification: verifyResult.verifyTime,
           total: totalTime,
         },
       };
