@@ -8,7 +8,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/config/firebase';
+import { db, functions } from '@/config/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '@/context/auth';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -56,46 +57,80 @@ export default function SignatureDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pgpExpanded, setPgpExpanded] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<string | null>(null);
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
   const tintColor = useThemeColor({}, 'tint');
   const textColor = useThemeColor({}, 'text');
 
-  useEffect(() => {
+  const loadSignature = async () => {
     if (!user || !id) {
       setLoading(false);
       return;
     }
 
-    const loadSignature = async () => {
-      try {
-        console.log('[SignatureDetail] Loading signature:', id);
-        const sigDoc = await getDoc(doc(db, 'users', user.uid, 'signatures', id));
+    try {
+      console.log('[SignatureDetail] Loading signature:', id);
+      const sigDoc = await getDoc(doc(db, 'users', user.uid, 'signatures', id));
 
-        if (!sigDoc.exists()) {
-          console.error('[SignatureDetail] Signature not found:', id);
-          setError('Signature not found');
-          setLoading(false);
-          return;
-        }
-
-        const data = sigDoc.data();
-        const sigData: SignatureData = {
-          ...data,
-          createdAt: data.createdAt?.toDate(),
-        } as SignatureData;
-
-        console.log('[SignatureDetail] Loaded signature:', sigData);
-        setSignature(sigData);
+      if (!sigDoc.exists()) {
+        console.error('[SignatureDetail] Signature not found:', id);
+        setError('Signature not found');
         setLoading(false);
-      } catch (err) {
-        console.error('[SignatureDetail] Error loading signature:', err);
-        setError('Failed to load signature');
-        setLoading(false);
+        return;
       }
-    };
 
+      const data = sigDoc.data();
+      const sigData: SignatureData = {
+        ...data,
+        createdAt: data.createdAt?.toDate(),
+      } as SignatureData;
+
+      console.log('[SignatureDetail] Loaded signature:', sigData);
+      setSignature(sigData);
+      setLoading(false);
+    } catch (err) {
+      console.error('[SignatureDetail] Error loading signature:', err);
+      setError('Failed to load signature');
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!signature) return;
+
+    setVerifying(true);
+    setVerifyResult(null);
+
+    try {
+      console.log('[SignatureDetail] Verifying signature:', signature.signatureId);
+
+      const verifyFunc = httpsCallable<{ signatureId: string }, { verified: boolean }>(
+        functions,
+        'verifySignature'
+      );
+      const result = await verifyFunc({ signatureId: signature.signatureId });
+
+      console.log('[SignatureDetail] Verification result:', result.data);
+
+      if (result.data.verified) {
+        setVerifyResult('✓ Signature verified successfully');
+        // Reload signature to get updated verified status
+        await loadSignature();
+      } else {
+        setVerifyResult('✗ Signature verification failed');
+      }
+    } catch (error: any) {
+      console.error('[SignatureDetail] Verification error:', error);
+      setVerifyResult('Error: ' + error.message);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  useEffect(() => {
     loadSignature();
   }, [user, id]);
 
@@ -275,10 +310,26 @@ export default function SignatureDetailScreen() {
           </View>
           <View style={styles.detailRow}>
             <ThemedText style={styles.detailLabel}>Verified:</ThemedText>
-            <ThemedText style={[styles.detailValue, { color: signature.verified ? '#34C759' : '#FF9500' }]}>
-              {signature.verified ? 'Yes' : 'Pending'}
-            </ThemedText>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <ThemedText style={[styles.detailValue, { color: signature.verified ? '#34C759' : '#FF9500' }]}>
+                {signature.verified ? 'Yes' : 'Pending'}
+              </ThemedText>
+              <TouchableOpacity
+                style={[styles.verifyButton, { backgroundColor: tintColor }]}
+                onPress={handleVerify}
+                disabled={verifying}
+              >
+                <ThemedText style={styles.verifyButtonText}>
+                  {verifying ? 'Verifying...' : 'Verify Now'}
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
           </View>
+          {verifyResult && (
+            <View style={styles.verifyResultContainer}>
+              <ThemedText style={styles.verifyResult}>{verifyResult}</ThemedText>
+            </View>
+          )}
         </View>
       </ScrollView>
     </ThemedView>
@@ -443,5 +494,23 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: 14,
     flex: 1,
+  },
+  verifyButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  verifyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  verifyResultContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+  },
+  verifyResult: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

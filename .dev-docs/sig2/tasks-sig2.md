@@ -1266,9 +1266,214 @@ const styles = StyleSheet.create({
 
 ---
 
-### Task 4.1: Create Verification Trigger
+### Task 4.1: Create Verification System
 
-#### 4.1.1 Implement Firestore Trigger
+#### 4.1a: Implement Manual Verification Function (Callable)
+
+**Goal**: Allow users to manually verify signatures from the app
+
+**File**: `functions/src/index.ts` (add)
+
+```typescript
+export const verifySignature = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 30,
+    invoker: 'public',
+    cors: [
+      'http://localhost:8081',
+      'http://localhost:19006',
+      /\.exp\.direct$/,
+      /\.expo\.dev$/,
+    ],
+  },
+  async (request) => {
+    // 1. Check authentication
+    const userId = request.auth?.uid || 'shell-test-user';
+    const { signatureId } = request.data;
+
+    console.log('[VERIFY] Verifying signature:', signatureId, 'for user:', userId);
+
+    if (!signatureId) {
+      throw new HttpsError('invalid-argument', 'Missing signatureId');
+    }
+
+    try {
+      // 2. Fetch signature document
+      const sigDoc = await db
+        .collection('users')
+        .doc(userId)
+        .collection('signatures')
+        .doc(signatureId)
+        .get();
+
+      if (!sigDoc.exists) {
+        throw new HttpsError('not-found', 'Signature not found');
+      }
+
+      const signature = sigDoc.data();
+      if (!signature) {
+        throw new HttpsError('not-found', 'Signature data missing');
+      }
+
+      console.log('[VERIFY] Found signature, signer:', signature.signedPayload?.signerId);
+
+      // 3. Fetch signer's public key
+      const signerEmail = signature.signedPayload.signerId;
+
+      const userQuery = await db
+        .collection('users')
+        .where('email', '==', signerEmail)
+        .limit(1)
+        .get();
+
+      if (userQuery.empty) {
+        throw new HttpsError('not-found', 'Signer not found: ' + signerEmail);
+      }
+
+      const signerData = userQuery.docs[0].data();
+      const publicKey = signerData.publicKey;
+
+      if (!publicKey) {
+        throw new HttpsError('failed-precondition', 'Signer has no public key');
+      }
+
+      console.log('[VERIFY] Fetched signer public key');
+
+      // 4. Verify signature using OpenPGP
+      const startVerify = Date.now();
+      const payloadText = JSON.stringify(signature.signedPayload, null, 2);
+
+      console.log('[VERIFY] Payload size:', payloadText.length, 'bytes');
+      console.log('[VERIFY] Verifying with OpenPGP...');
+
+      const message = await openpgp.readMessage({
+        armoredMessage: signature.pgpSignature,
+      });
+
+      const publicKeyObj = await openpgp.readKey({
+        armoredKey: publicKey,
+      });
+
+      const verificationResult = await openpgp.verify({
+        message,
+        verificationKeys: publicKeyObj,
+      });
+
+      const verified = await verificationResult.signatures[0].verified;
+      const verifyTime = Date.now() - startVerify;
+
+      console.log('[VERIFY] Verification result:', verified);
+      console.log('[VERIFY] Verification took:', verifyTime, 'ms');
+
+      // 5. Update verification status in Firestore
+      await sigDoc.ref.update({
+        verified,
+        verifiedAt: new Date(),
+        verifiedBy: userId,
+      });
+
+      console.log('[VERIFY] ✓ Verification status updated in Firestore');
+
+      return {
+        success: true,
+        verified,
+        signatureId,
+        verifiedAt: new Date().toISOString(),
+        timings: {
+          verification: verifyTime,
+        },
+      };
+    } catch (error: any) {
+      console.error('[VERIFY] Error:', error);
+
+      // Try to update signature with error
+      try {
+        await db
+          .collection('users')
+          .doc(userId)
+          .collection('signatures')
+          .doc(signatureId)
+          .update({
+            verified: false,
+            verifiedAt: new Date(),
+            verificationError: error.message,
+          });
+      } catch (updateError) {
+        console.error('[VERIFY] Failed to update error status:', updateError);
+      }
+
+      throw new HttpsError('internal', 'Verification failed: ' + error.message);
+    }
+  }
+);
+```
+
+**Client-side integration**: Add verify button to signature detail screen
+
+**File**: `app/signatures/[id].tsx` (modify Technical Details section)
+
+```typescript
+const [verifying, setVerifying] = useState(false);
+const [verifyResult, setVerifyResult] = useState<string | null>(null);
+
+const handleVerify = async () => {
+  setVerifying(true);
+  setVerifyResult(null);
+
+  try {
+    const verifyFunc = httpsCallable<{signatureId: string}, {verified: boolean}>(
+      functions,
+      'verifySignature'
+    );
+    const result = await verifyFunc({ signatureId: signature.signatureId });
+
+    console.log('[SignatureDetail] Verification result:', result.data);
+
+    if (result.data.verified) {
+      setVerifyResult('✓ Signature verified successfully');
+      // Reload signature to get updated verified status
+      await loadSignature();
+    } else {
+      setVerifyResult('✗ Signature verification failed');
+    }
+  } catch (error: any) {
+    console.error('[SignatureDetail] Verification error:', error);
+    setVerifyResult('Error: ' + error.message);
+  } finally {
+    setVerifying(false);
+  }
+};
+
+// In the Technical Details section:
+<View style={styles.detailRow}>
+  <ThemedText style={styles.detailLabel}>Verified:</ThemedText>
+  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+    <ThemedText style={[styles.detailValue, { color: signature.verified ? '#34C759' : '#FF9500' }]}>
+      {signature.verified ? 'Yes' : 'Pending'}
+    </ThemedText>
+    <TouchableOpacity
+      style={[styles.verifyButton, { backgroundColor: tintColor }]}
+      onPress={handleVerify}
+      disabled={verifying}
+    >
+      <ThemedText style={styles.verifyButtonText}>
+        {verifying ? 'Verifying...' : 'Verify Now'}
+      </ThemedText>
+    </TouchableOpacity>
+  </View>
+</View>
+{verifyResult && (
+  <ThemedText style={styles.verifyResult}>{verifyResult}</ThemedText>
+)}
+```
+
+**Deliverable**: Manual verification callable function + UI integration
+
+---
+
+#### 4.1b: Implement Automatic Verification Trigger (Optional)
 
 **File**: `functions/src/index.ts` (add)
 

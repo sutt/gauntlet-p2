@@ -582,6 +582,153 @@ export const signMessages = onCall(
 );
 
 /**
+ * V2 Phase 4: Verify a signature
+ * Allows users to manually verify signatures from the app
+ */
+export const verifySignature = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 30,
+    invoker: 'public',
+    cors: [
+      'http://localhost:8081',
+      'http://localhost:19006',
+      /\.exp\.direct$/,
+      /\.expo\.dev$/,
+    ],
+  },
+  async (request) => {
+    const startTime = Date.now();
+    const userId = request.auth?.uid || 'shell-test-user';
+    const { signatureId } = request.data;
+
+    console.log('[VERIFY] Verifying signature:', signatureId, 'for user:', userId);
+
+    // 1. Validate input
+    if (!signatureId) {
+      throw new HttpsError('invalid-argument', 'Missing signatureId');
+    }
+
+    try {
+      // 2. Fetch signature document
+      const sigDoc = await db
+        .collection('users')
+        .doc(userId)
+        .collection('signatures')
+        .doc(signatureId)
+        .get();
+
+      if (!sigDoc.exists) {
+        throw new HttpsError('not-found', 'Signature not found');
+      }
+
+      const signature = sigDoc.data();
+      if (!signature) {
+        throw new HttpsError('not-found', 'Signature data missing');
+      }
+
+      console.log('[VERIFY] Found signature, signer:', signature.signedPayload?.signerId);
+
+      // 3. Fetch signer's public key
+      const signerEmail = signature.signedPayload.signerId;
+
+      const userQuery = await db
+        .collection('users')
+        .where('email', '==', signerEmail)
+        .limit(1)
+        .get();
+
+      if (userQuery.empty) {
+        throw new HttpsError('not-found', 'Signer not found: ' + signerEmail);
+      }
+
+      const signerData = userQuery.docs[0].data();
+      const publicKey = signerData.publicKey;
+
+      if (!publicKey) {
+        throw new HttpsError('failed-precondition', 'Signer has no public key');
+      }
+
+      console.log('[VERIFY] Fetched signer public key');
+
+      // 4. Verify signature using OpenPGP
+      const startVerify = Date.now();
+      const payloadText = JSON.stringify(signature.signedPayload, null, 2);
+
+      console.log('[VERIFY] Payload size:', payloadText.length, 'bytes');
+      console.log('[VERIFY] Verifying with OpenPGP...');
+
+      const message = await openpgp.readMessage({
+        armoredMessage: signature.pgpSignature,
+      });
+
+      const publicKeyObj = await openpgp.readKey({
+        armoredKey: publicKey,
+      });
+
+      const verificationResult = await openpgp.verify({
+        message,
+        verificationKeys: publicKeyObj,
+      });
+
+      const verified = await verificationResult.signatures[0].verified;
+      const verifyTime = Date.now() - startVerify;
+
+      console.log('[VERIFY] Verification result:', verified);
+      console.log('[VERIFY] Verification took:', verifyTime, 'ms');
+
+      // 5. Update verification status in Firestore
+      await sigDoc.ref.update({
+        verified,
+        verifiedAt: new Date(),
+        verifiedBy: userId,
+      });
+
+      console.log('[VERIFY] ✓ Verification status updated in Firestore');
+
+      const totalTime = Date.now() - startTime;
+      console.log('[VERIFY] ✓ Verification completed. Total time:', totalTime, 'ms');
+
+      return {
+        success: true,
+        verified,
+        signatureId,
+        verifiedAt: new Date().toISOString(),
+        timings: {
+          verification: verifyTime,
+          total: totalTime,
+        },
+      };
+    } catch (error: any) {
+      console.error('[VERIFY] Error:', error);
+
+      // Try to update signature with error
+      try {
+        await db
+          .collection('users')
+          .doc(userId)
+          .collection('signatures')
+          .doc(signatureId)
+          .update({
+            verified: false,
+            verifiedAt: new Date(),
+            verificationError: error.message,
+          });
+      } catch (updateError) {
+        console.error('[VERIFY] Failed to update error status:', updateError);
+      }
+
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      throw new HttpsError('internal', `Verification failed: ${error.message}`);
+    }
+  }
+);
+
+/**
  * Generate a random nonce for replay protection
  */
 function generateNonce(): string {
