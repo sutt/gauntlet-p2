@@ -53,6 +53,7 @@ firebase*.log
 firestore*log
 .firebase-emulator-data/
 database-debug.log
+emulator.log
 
 # other
 .vscode

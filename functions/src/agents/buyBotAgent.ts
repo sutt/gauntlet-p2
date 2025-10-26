@@ -11,7 +11,7 @@
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { getFirestore } from 'firebase-admin/firestore';
-import { BUYBOT_USER_ID, getPowerUserIds } from '../config/agents';
+import { BUYBOT_USER_ID, getPowerUserIds, isPowerUser } from '../config/agents';
 import { getConversationContext } from '../services/contextRetrieval';
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -75,7 +75,17 @@ export const onBuyBotMessage = onDocumentCreated(
 
       console.log('[BUYBOT] ✓ Message is from user, processing...');
 
-      // 3. Process the user's message and respond
+      // 3. Check if this is a power user making a direct purchase request
+      if (await checkDirectPowerUserRequest(message.senderId, message.text)) {
+        console.log('[BUYBOT] ✅ Power user auto-approval triggered');
+        await sendAgentMessage(
+          conversationId,
+          "✅ Approved! As a power user, your purchase request has been automatically authorized. No additional signatures needed."
+        );
+        return;
+      }
+
+      // 4. Process the user's message and respond normally
       await processUserMessage(conversationId, message);
 
     } catch (error: any) {
@@ -85,6 +95,101 @@ export const onBuyBotMessage = onDocumentCreated(
     }
   }
 );
+
+/**
+ * Analyze if a message is a purchase request using LLM semantic analysis
+ * Returns true if the message represents a purchase intent
+ */
+async function isPurchaseRequest(messageText: string): Promise<boolean> {
+  console.log('[BUYBOT] 🔍 Analyzing message for purchase intent:', messageText);
+
+  try {
+    const apiKey = getOpenAIKey();
+    const openai = createOpenAI({ apiKey });
+
+    const prompt = `Analyze if the following message represents a purchase request or intent to buy something.
+
+Message: "${messageText}"
+
+Return ONLY a JSON object with this exact structure:
+{
+  "isPurchaseRequest": true or false,
+  "reasoning": "brief explanation"
+}
+
+A purchase request includes:
+- Direct requests to buy/purchase something (e.g., "I need to buy a laptop")
+- Intent to acquire/order items (e.g., "Can we get new office chairs?")
+- Spending requests (e.g., "We should invest in new software")
+
+NOT a purchase request:
+- General questions (e.g., "What can you do?")
+- Greetings (e.g., "Hi", "Hello")
+- Unrelated conversation (e.g., "How's the weather?")
+- Past tense about buying (e.g., "I already bought this")`;
+
+    const { text: responseText } = await generateText({
+      model: openai('gpt-4-turbo'),
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a semantic analysis assistant. Always respond with valid JSON only.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: 0.3, // Lower temperature for more consistent analysis
+    });
+
+    // Parse the response
+    const result = JSON.parse(responseText);
+
+    console.log('[BUYBOT] 📊 PURCHASE_INTENT_ANALYSIS:', {
+      message: messageText.substring(0, 50),
+      isPurchaseRequest: result.isPurchaseRequest,
+      reasoning: result.reasoning,
+    });
+
+    return result.isPurchaseRequest === true;
+
+  } catch (error: any) {
+    console.error('[BUYBOT] Error analyzing purchase intent:', error);
+    // On error, default to false (don't auto-approve)
+    console.log('[BUYBOT] 📊 PURCHASE_INTENT_ANALYSIS: ERROR - defaulting to false');
+    return false;
+  }
+}
+
+/**
+ * Check if message is from a power user making a direct purchase request
+ * Power users can approve their own purchases without additional authorization
+ */
+async function checkDirectPowerUserRequest(
+  senderId: string,
+  messageText: string
+): Promise<boolean> {
+  // First check if sender is a power user
+  if (!isPowerUser(senderId)) {
+    console.log('[BUYBOT] Sender is not a power user, skipping auto-approval');
+    return false;
+  }
+
+  console.log('[BUYBOT] ⭐ Sender is a power user, checking for purchase intent...');
+
+  // Use LLM to semantically detect purchase request
+  const isPurchase = await isPurchaseRequest(messageText);
+
+  console.log('[BUYBOT] 🎯 POWER_USER_AUTO_APPROVAL:', {
+    senderId,
+    isPowerUser: true,
+    isPurchaseRequest: isPurchase,
+    willAutoApprove: isPurchase,
+  });
+
+  return isPurchase;
+}
 
 /**
  * Fetch email addresses for power users

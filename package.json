@@ -11,8 +11,11 @@
     "lint": "expo lint",
     "functions:build": "cd functions && npm run build",
     "functions:dev": "npm run functions:build && firebase emulators:start --import=.firebase-emulator-data --export-on-exit",
+    "functions:dev:logged": "npm run functions:build && firebase emulators:start --import=.firebase-emulator-data --export-on-exit 2>&1 | tee emulator.log",
     "functions:shell": "npm run functions:build && firebase functions:shell",
     "functions:logs": "firebase functions:log",
+    "functions:logs:buybot": "tail -f emulator.log | grep --line-buffered --color=always BUYBOT",
+    "functions:logs:analysis": "tail -f emulator.log | grep --line-buffered --color=always 'PURCHASE_INTENT_ANALYSIS\\|POWER_USER_AUTO_APPROVAL'",
     "functions:deploy": "npm run functions:build && firebase deploy --only functions"
   },
   "dependencies": {
