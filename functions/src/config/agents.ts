@@ -2,65 +2,61 @@
  * CHAI Agent Configuration
  * Contains agent user IDs and power user authorization lists
  *
- * Configuration sources (in order of precedence):
+ * Configuration sources:
  * 1. Local development: .env.local file (process.env.*)
- * 2. Production: Firebase environment config (functions.config().chai.*)
- * 3. Future: Firebase Secret Manager (for enhanced security)
+ * 2. Production (v2 functions): defineString params
+ *
+ * Note: Firebase v2 functions do NOT support functions.config()
+ * All production config must be set as environment variables or params
  */
 
-import * as functions from 'firebase-functions';
+import { buybotUserId, powerUserIds } from './params';
 
 /**
  * Get BuyBot user ID from environment
- * Tries process.env first (local), then Firebase config (production)
+ * Works in both local (.env.local) and production (params)
  */
 export function getBuyBotUserId(): string {
-  // Try environment variable first (local .env.local)
-  if (process.env.BUYBOT_USER_ID) {
-    return process.env.BUYBOT_USER_ID;
+  // In emulator, use .env.local
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    return process.env.BUYBOT_USER_ID || '';
   }
 
-  // Try Firebase config (production)
-  const config = functions.config();
-  const uid = config.chai?.buybot_uid;
+  // In production, use param
+  const uid = buybotUserId.value();
 
-  if (uid) {
-    return uid;
+  if (!uid) {
+    console.warn('[AGENTS] ⚠️  BUYBOT_USER_ID not configured!');
   }
 
-  // Not configured anywhere - warn and return empty
-  console.warn('[AGENTS] ⚠️  BUYBOT_USER_ID not configured! Set via .env.local or firebase functions:config:set chai.buybot_uid');
-  return '';
+  return uid;
 }
 
 /**
  * Get power user IDs from environment
  * Expects comma-separated list: "uid1,uid2,uid3"
- * Tries process.env first (local), then Firebase config (production)
+ * Works in both local (.env.local) and production (params)
  */
 export function getPowerUserIds(): string[] {
-  // Try environment variable first (local .env.local)
-  if (process.env.POWER_USER_IDS) {
-    return process.env.POWER_USER_IDS
-      .split(',')
-      .map(id => id.trim())
-      .filter(id => id.length > 0);
+  let idsString: string;
+
+  // In emulator, use .env.local
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    idsString = process.env.POWER_USER_IDS || '';
+  } else {
+    // In production, use param
+    idsString = powerUserIds.value();
   }
 
-  // Try Firebase config (production)
-  const config = functions.config();
-  const idsString = config.chai?.power_user_ids;
-
-  if (idsString) {
-    return idsString
-      .split(',')
-      .map((id: string) => id.trim())
-      .filter((id: string) => id.length > 0);
+  if (!idsString) {
+    console.warn('[AGENTS] ⚠️  POWER_USER_IDS not configured!');
+    return [];
   }
 
-  // Not configured anywhere - warn and return empty array
-  console.warn('[AGENTS] ⚠️  POWER_USER_IDS not configured! Set via .env.local or firebase functions:config:set chai.power_user_ids');
-  return [];
+  return idsString
+    .split(',')
+    .map(id => id.trim())
+    .filter(id => id.length > 0);
 }
 
 // Export constants for backwards compatibility and ease of use

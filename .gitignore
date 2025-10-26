@@ -55,5 +55,7 @@ firestore*log
 database-debug.log
 emulator.log
 
+# firebase env
+functions/.env.will-msg-app-v2
 # other
 .vscode

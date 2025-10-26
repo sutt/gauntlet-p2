@@ -15,7 +15,7 @@ import { BUYBOT_USER_ID, getPowerUserIds, isPowerUser } from '../config/agents';
 import { getConversationContext } from '../services/contextRetrieval';
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { getOpenAIKey } from '../config';
+import { getOpenAIKey, openaiApiKey } from '../config';
 
 const db = getFirestore();
 
@@ -26,7 +26,13 @@ const db = getFirestore();
  * Only processes messages in conversations where BuyBot is a participant.
  */
 export const onBuyBotMessage = onDocumentCreated(
-  'conversations/{conversationId}/messages/{messageId}',
+  {
+    document: 'conversations/{conversationId}/messages/{messageId}',
+    secrets: [openaiApiKey], // Declare secret dependencies for OpenAI access
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 60,
+  },
   async (event) => {
     // Check if document exists
     if (!event.data) {
