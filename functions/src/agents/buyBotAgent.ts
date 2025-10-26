@@ -10,6 +10,7 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { getFirestore } from 'firebase-admin/firestore';
 import { BUYBOT_USER_ID } from '../config/agents';
+import { getConversationContext } from '../services/contextRetrieval';
 
 const db = getFirestore();
 
@@ -82,8 +83,8 @@ export const onBuyBotMessage = onDocumentCreated(
 
 /**
  * Process a user message and generate a response
- * Phase 1: Simple echo/acknowledgment
- * Phase 2+: LLM integration, signature verification, etc.
+ * Phase 2.1: Fetch conversation context (last 10 messages)
+ * Phase 2.2: LLM integration for intelligent responses
  */
 async function processUserMessage(
   conversationId: string,
@@ -92,9 +93,26 @@ async function processUserMessage(
   console.log('[BUYBOT] Processing message from:', message.senderName);
   console.log('[BUYBOT] Message text:', message.text);
 
-  // For now, send a simple acknowledgment
-  // In Phase 2, we'll add LLM integration here
-  const responseText = `Hello! I'm BuyBot, your purchasing assistant. I received your message: "${message.text}"
+  // Phase 2.1: Fetch conversation context (last 10 messages)
+  console.log('[BUYBOT] Fetching conversation context...');
+  const conversationHistory = await getConversationContext(conversationId, 10);
+
+  console.log('[BUYBOT] Conversation context retrieved:');
+  console.log('[BUYBOT] - Message count:', conversationHistory.length);
+  if (conversationHistory.length > 0) {
+    console.log('[BUYBOT] - Recent messages:');
+    conversationHistory.forEach((msg, i) => {
+      console.log(`[BUYBOT]   ${i + 1}. ${msg}`);
+    });
+  }
+
+  // For now, send an acknowledgment with context info
+  // In Phase 2.2, we'll pass this context to GPT-4
+  const contextSummary = conversationHistory.length > 0
+    ? `\n\nConversation history (${conversationHistory.length} messages):\n${conversationHistory.slice(-3).join('\n')}`
+    : '\n\n(This is the first message in our conversation)';
+
+  const responseText = `Hello! I'm BuyBot, your purchasing assistant. I received your message: "${message.text}"${contextSummary}
 
 I'm currently in test mode. Once fully configured, I can help you with:
 - Purchase requests
