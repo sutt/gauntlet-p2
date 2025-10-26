@@ -57,9 +57,16 @@ service cloud.firestore {
         allow read: if isSignedIn() && isParticipant(conversationId);
 
         // Can create if you're in conversation AND you're the sender
+        // CHAI: Validate attachedSignatureId if present
         allow create: if isSignedIn()
                       && isParticipant(conversationId)
-                      && request.auth.uid == request.resource.data.senderId;
+                      && request.auth.uid == request.resource.data.senderId
+                      && (
+                        // Validate attachedSignatureId if present
+                        !request.resource.data.keys().hasAny(['attachedSignatureId'])
+                        || (request.resource.data.attachedSignatureId is string
+                            && request.resource.data.attachedSignatureId.size() > 0)
+                      );
 
         // MILESTONE 9: Can update to add yourself to readBy map
         // V2: Can update to add signature fields (signatureIds, signatureCount)
