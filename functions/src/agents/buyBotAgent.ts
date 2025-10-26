@@ -246,14 +246,57 @@ async function handleSignatureVerification(
     // Verification succeeded
     console.log('[BUYBOT] ✅ Signature verified successfully');
 
-    // Acknowledge receipt based on whether there's request text
-    const acknowledgment = requestText
-      ? `✅ Signature received and verified. I'm reviewing this authorization in the context of your request: "${requestText}"`
-      : `✅ Signature received and verified. I'm considering this authorization in the context of our conversation.`;
+    // Phase 4.3: Check if signer is a power user
+    const signerEmail = verification.payload.signerId;
+    console.log('[BUYBOT] 🔍 Checking if signer is power user:', signerEmail);
 
-    await sendAgentMessage(conversationId, acknowledgment);
+    // Query user by email to get their UID
+    const userQuery = await db
+      .collection('users')
+      .where('email', '==', signerEmail)
+      .limit(1)
+      .get();
 
-    // TODO Phase 4.3: Check if signer is a power user
+    if (userQuery.empty) {
+      console.log('[BUYBOT] ❌ Signer not found:', signerEmail);
+      await sendAgentMessage(
+        conversationId,
+        `❌ I cannot verify the authorization. Could not find user with email: ${signerEmail}\n\n` +
+        `I'm cancelling this request. The signature may be from an external or deleted user.`
+      );
+      return;
+    }
+
+    const signerUserId = userQuery.docs[0].id;
+    const signerData = userQuery.docs[0].data();
+    const signerName = signerData.displayName || signerEmail;
+
+    if (!isPowerUser(signerUserId)) {
+      console.log('[BUYBOT] ❌ Signer is not a power user:', {
+        email: signerEmail,
+        uid: signerUserId,
+      });
+
+      const powerUserEmails = await getPowerUserEmails();
+      const powerUserList = powerUserEmails.length > 0
+        ? powerUserEmails.join(', ')
+        : 'None configured';
+
+      await sendAgentMessage(
+        conversationId,
+        `❌ This signature is from ${signerName} (${signerEmail}), but they are not authorized to approve purchases.\n\n` +
+        `Only power users can provide authorization. Current power users: ${powerUserList}\n\n` +
+        `I'm cancelling this request. Please obtain a signature from an authorized power user.`
+      );
+      return;
+    }
+
+    console.log('[BUYBOT] ✅ Signer is a power user:', {
+      email: signerEmail,
+      name: signerName,
+      uid: signerUserId,
+    });
+
     // TODO Phase 4.4: Analyze signature payload relevance to request
 
   } catch (error: any) {
