@@ -541,8 +541,8 @@ export default function ChatScreen() {
   };
 
   const handleSend = async () => {
-    // V1: Allow sending if either text or image is present
-    if ((!inputText.trim() && !selectedImage) || !user || !id) return;
+    // V1: Allow sending if either text, image, or signature is present
+    if ((!inputText.trim() && !selectedImage && !attachedSignature) || !user || !id) return;
 
     const messageText = inputText;
     const imageUri = selectedImage;
@@ -1091,13 +1091,13 @@ export default function ChatScreen() {
               styles.sendButton,
               {
                 backgroundColor:
-                  (inputText.trim() || selectedImage) && !sending && !uploadingImage
+                  (inputText.trim() || selectedImage || attachedSignature) && !sending && !uploadingImage
                     ? tintColor
                     : '#ccc',
               },
             ]}
             onPress={handleSend}
-            disabled={(!inputText.trim() && !selectedImage) || sending || uploadingImage}
+            disabled={(!inputText.trim() && !selectedImage && !attachedSignature) || sending || uploadingImage}
           >
             {sending || uploadingImage ? (
               <ActivityIndicator size="small" color="#fff" />
