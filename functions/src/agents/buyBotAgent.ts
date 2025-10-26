@@ -213,6 +213,111 @@ async function checkDirectPowerUserRequest(
 }
 
 /**
+ * Build LLM prompt for signature relevance analysis
+ * Phase 4.4: Determine if signed conversation authorizes the purchase request
+ */
+function buildRelevancePrompt(
+  signedPayload: any,
+  currentRequest: string
+): string {
+  const conversationText = signedPayload.messages
+    .map((m: any) => `${m.senderName}: ${m.text}`)
+    .join('\n');
+
+  return `You are analyzing whether a digitally signed conversation authorizes a purchase request.
+
+SIGNED CONVERSATION (verified authentic):
+${conversationText}
+
+Purpose: ${signedPayload.purpose || 'Not specified'}
+Signed by: ${signedPayload.signerId}
+Signed at: ${new Date(signedPayload.signedAt).toLocaleString()}
+
+CURRENT PURCHASE REQUEST:
+${currentRequest || '(No specific request text - considering broader conversation context)'}
+
+TASK:
+Determine if the signed conversation clearly authorizes this specific purchase request.
+
+Be suspicious of roundabout tricks:
+- "yes" to "do you like sandwiches?" does NOT authorize a quadcopter purchase
+- Approval must be contextually relevant to the request
+- Generic agreements without specific context are NOT sufficient
+- The signed conversation should show clear intent to authorize THIS purchase
+
+Respond in JSON format:
+{
+  "relevant": boolean,
+  "confidence": number (0-1),
+  "reasoning": string (explain your decision in 1-2 sentences)
+}`;
+}
+
+/**
+ * Analyze signature payload relevance using LLM
+ * Phase 4.4: Semantic analysis to prevent authorization tricks
+ */
+async function analyzeSignatureRelevance(
+  payload: any,
+  requestText: string
+): Promise<{ relevant: boolean; confidence: number; reasoning: string }> {
+  console.log('[BUYBOT] 🤖 Analyzing signature relevance with LLM...');
+
+  const TEST_MODE = process.env.TEST_MODE === 'true';
+
+  if (TEST_MODE) {
+    console.log('[BUYBOT] TEST_MODE enabled, returning mock relevance result');
+    // Mock response for testing
+    return {
+      relevant: true,
+      confidence: 0.9,
+      reasoning: 'Test mode: signature accepted for development testing'
+    };
+  }
+
+  try {
+    const apiKey = getOpenAIKey();
+    const openai = createOpenAI({ apiKey });
+
+    const prompt = buildRelevancePrompt(payload, requestText);
+
+    const { text: responseText } = await generateText({
+      model: openai('gpt-4-turbo'),
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a security-focused authorization analyzer. Always respond with valid JSON only.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: 0.3, // Lower temperature for consistent security analysis
+    });
+
+    const result = JSON.parse(responseText);
+
+    console.log('[BUYBOT] 📊 RELEVANCE_ANALYSIS:', {
+      relevant: result.relevant,
+      confidence: result.confidence,
+      reasoning: result.reasoning.substring(0, 100),
+    });
+
+    return result;
+
+  } catch (error: any) {
+    console.error('[BUYBOT] Error analyzing signature relevance:', error);
+    // On error, default to rejecting (fail secure)
+    return {
+      relevant: false,
+      confidence: 0,
+      reasoning: 'Error analyzing signature relevance - defaulting to rejection for security'
+    };
+  }
+}
+
+/**
  * Handle signature verification for purchase authorization
  * Phase 4.1 & 4.2: Verify signature cryptographically and check authorization
  */
@@ -297,7 +402,43 @@ async function handleSignatureVerification(
       uid: signerUserId,
     });
 
-    // TODO Phase 4.4: Analyze signature payload relevance to request
+    // Phase 4.4: Analyze signature payload relevance to request
+    const relevance = await analyzeSignatureRelevance(
+      verification.payload,
+      requestText
+    );
+
+    if (!relevance.relevant || relevance.confidence < 0.5) {
+      console.log('[BUYBOT] ❌ Signature not relevant:', {
+        relevant: relevance.relevant,
+        confidence: relevance.confidence,
+      });
+
+      await sendAgentMessage(
+        conversationId,
+        `❌ I cannot accept this signature for your request.\n\n` +
+        `**Analysis**: ${relevance.reasoning}\n\n` +
+        `The signed conversation does not clearly authorize your current request. ` +
+        `Please obtain a signature that specifically addresses this purchase.`
+      );
+      return;
+    }
+
+    // All checks passed - Purchase approved!
+    console.log('[BUYBOT] ✅ PURCHASE APPROVED:', {
+      signer: signerName,
+      confidence: relevance.confidence,
+    });
+
+    await sendAgentMessage(
+      conversationId,
+      `✅ **Purchase Approved!**\n\n` +
+      `**Authorization**: ${signerName} (${signerEmail})\n` +
+      `**Status**: Power user signature verified\n` +
+      `**Confidence**: ${(relevance.confidence * 100).toFixed(0)}%\n` +
+      `**Reasoning**: ${relevance.reasoning}\n\n` +
+      `Your request has been authorized. Proceeding with purchase.`
+    );
 
   } catch (error: any) {
     console.log('[BUYBOT] ❌ Signature verification error:', {
