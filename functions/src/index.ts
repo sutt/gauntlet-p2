@@ -849,3 +849,13 @@ function generateNonce(): string {
  * Run via Functions shell: setupCreateBuyBotUser()
  */
 export { setupCreateBuyBotUser };
+
+// ===================================================================
+// CHAI: AI Agent - BuyBot
+// ===================================================================
+
+/**
+ * BuyBot Message Trigger
+ * Responds to messages in conversations where BuyBot is a participant
+ */
+export { onBuyBotMessage } from './agents/buyBotAgent';
