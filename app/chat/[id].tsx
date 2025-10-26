@@ -31,8 +31,10 @@ import { Ionicons } from '@expo/vector-icons';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import TranslationModal from '@/components/TranslationModal';
 import SignatureModal from '@/components/SignatureModal';
+import SignatureAttachmentModal from '@/components/SignatureAttachmentModal';
 import { Image } from 'expo-image';
 import { Avatar } from '@/components/Avatar';
+import type { Signature } from '@/types/signature';
 
 // Type for items in the FlatList (can be message or date divider)
 type ChatListItem =
@@ -87,7 +89,7 @@ export default function ChatScreen() {
   const [conversationParticipants, setConversationParticipants] = useState<Array<{ email: string; displayName: string }>>([]);
   // CHAI: Signature attachment state
   const [showSignatureAttachmentModal, setShowSignatureAttachmentModal] = useState(false);
-  const [attachedSignature, setAttachedSignature] = useState<any | null>(null); // Will type properly when creating modal
+  const [attachedSignature, setAttachedSignature] = useState<Signature | null>(null);
 
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -1091,29 +1093,18 @@ export default function ChatScreen() {
         participants={conversationParticipants}
       />
 
-      {/* CHAI: Signature Attachment Modal - Placeholder (will implement in Phase 3.3) */}
-      <Modal
-        visible={showSignatureAttachmentModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowSignatureAttachmentModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText type="subtitle">Attach Signature</ThemedText>
-              <TouchableOpacity onPress={() => setShowSignatureAttachmentModal(false)}>
-                <Ionicons name="close" size={24} color={tintColor} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalBody}>
-              <ThemedText style={{ textAlign: 'center', opacity: 0.6 }}>
-                Signature attachment modal coming in Phase 3.3
-              </ThemedText>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* CHAI: Signature Attachment Modal */}
+      {user && (
+        <SignatureAttachmentModal
+          visible={showSignatureAttachmentModal}
+          onClose={() => setShowSignatureAttachmentModal(false)}
+          onSelectSignature={(signature) => {
+            console.log('[Chat] Signature selected for attachment:', signature.signatureId);
+            setAttachedSignature(signature);
+          }}
+          userId={user.uid}
+        />
+      )}
 
       {/* V1: Full-screen image viewer */}
       <Modal
@@ -1458,34 +1449,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginLeft: 2,
     fontWeight: '500',
-  },
-  // CHAI: Signature attachment modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 16,
-    minHeight: 400,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  modalBody: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
