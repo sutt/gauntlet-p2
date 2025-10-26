@@ -574,6 +574,8 @@ export default function ChatScreen() {
       conversationId: id,
       status: 'sending',
       tempId,
+      // CHAI: Include signature ID if attached
+      ...(signatureToAttach && { attachedSignatureId: signatureToAttach.signatureId }),
     };
 
     // Milestone 7: Add to pending messages immediately (instant feedback)
@@ -585,6 +587,12 @@ export default function ChatScreen() {
       const messageData: SendMessageData = {
         text: messageText || undefined,
       };
+
+      // CHAI: Add signature ID if attached
+      if (signatureToAttach) {
+        messageData.attachedSignatureId = signatureToAttach.signatureId;
+        console.log('[Chat] Sending message with attached signature:', signatureToAttach.signatureId);
+      }
 
       // V1: Upload image if present
       if (imageUri) {

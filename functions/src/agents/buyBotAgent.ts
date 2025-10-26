@@ -43,6 +43,8 @@ export const onBuyBotMessage = onDocumentCreated(
       messageId,
       senderId: message.senderId,
       text: message.text?.substring(0, 50),
+      hasAttachedSignature: !!message.attachedSignatureId,
+      attachedSignatureId: message.attachedSignatureId || null,
     });
 
     try {

@@ -82,6 +82,8 @@ export interface SendMessageData {
     fileSize: number;
     mimeType: string;
   };
+  // CHAI: Signature attachment for AI agent authorization
+  attachedSignatureId?: string;
 }
 
 /**
@@ -116,6 +118,11 @@ export const sendMessage = async (
       firestoreMessageData.mediaUrl = messageData.mediaUrl;
       firestoreMessageData.mediaPath = messageData.mediaPath;
       firestoreMessageData.mediaMetadata = messageData.mediaMetadata;
+    }
+
+    // CHAI: Add signature attachment if present
+    if (messageData.attachedSignatureId) {
+      firestoreMessageData.attachedSignatureId = messageData.attachedSignatureId;
     }
 
     const batch = writeBatch(db);
