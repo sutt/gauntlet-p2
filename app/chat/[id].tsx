@@ -546,8 +546,10 @@ export default function ChatScreen() {
 
     const messageText = inputText;
     const imageUri = selectedImage;
+    const signatureToAttach = attachedSignature; // CHAI: Capture signature before clearing
     setInputText(''); // Clear input immediately for better UX
     setSelectedImage(null); // Clear selected image
+    setAttachedSignature(null); // CHAI: Clear attached signature
 
     // V1: Clear typing state when sending
     if (isCurrentUserTyping) {
@@ -1013,6 +1015,29 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {/* CHAI: Signature attachment chip */}
+        {attachedSignature && (
+          <View style={[styles.signatureChip, { borderColor }]}>
+            <Ionicons name="ribbon" size={18} color={tintColor} style={styles.chipIcon} />
+            <View style={styles.chipContent}>
+              <ThemedText style={styles.chipTitle} numberOfLines={1}>
+                Signature from {attachedSignature.signedPayload.signerId}
+              </ThemedText>
+              <ThemedText style={styles.chipSubtext} numberOfLines={1}>
+                {attachedSignature.signedPayload.messages.length} message
+                {attachedSignature.signedPayload.messages.length !== 1 ? 's' : ''} • {' '}
+                {attachedSignature.signatureId.substring(0, 8)}...
+              </ThemedText>
+            </View>
+            <TouchableOpacity
+              onPress={() => setAttachedSignature(null)}
+              style={styles.chipRemoveButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#999" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* V1: Upload progress indicator */}
         {uploadingImage && (
           <View style={styles.uploadProgressContainer}>
@@ -1449,5 +1474,34 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginLeft: 2,
     fontWeight: '500',
+  },
+  // CHAI: Signature attachment chip styles
+  signatureChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F0F5',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  chipIcon: {
+    marginRight: 10,
+  },
+  chipContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  chipTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  chipSubtext: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  chipRemoveButton: {
+    padding: 4,
   },
 });
